@@ -856,9 +856,8 @@ async def backfill_server(ctx, limit: int = None):
         await update_log(f"📂 Processing #{channel.name} ({idx+1}/{len(text_channels)})")
         
         try:
-            # Process messages in channel
-            messages = await fetch_history_with_retry(channel, limit)
-            for message in messages:
+            # Process messages in channel using batched fetches
+            async for message in fetch_history_batched(channel, limit):
                 if message.author.bot:
                     continue
                 
@@ -895,6 +894,7 @@ async def backfill_server(ctx, limit: int = None):
                 # Log every 100 messages
                 if channel_messages % 100 == 0:
                     await update_log(f"  └─ {channel_messages} messages in #{channel.name} ({channel_skipped} skipped)")
+                    await asyncio.sleep(0)
                 
                 # Extract emojis from message
                 all_emojis = extract_emojis(message.content)
@@ -966,7 +966,7 @@ async def backfill_server(ctx, limit: int = None):
                     emoji = str(reaction.emoji)
                     
                     # Get reaction users
-                    for user in await fetch_reaction_users_with_retry(reaction):
+                    async for user in fetch_reaction_users_with_retry(reaction):
                         if user.bot:
                             continue
                         

@@ -136,27 +136,47 @@ async def get_member_by_reference(ctx, reference: str):
             return member
     
     return None
-async def fetch_history_with_retry(channel, limit=None):
-    """Fetch channel history handling rate limits"""
-    while True:
-        try:
-            return [m async for m in channel.history(limit=limit)]
-        except discord.HTTPException as e:
-            if getattr(e, 'status', None) == 429:
-                await asyncio.sleep(getattr(e, 'retry_after', 5))
-            else:
-                raise
+async def fetch_history_batched(channel, limit=None, batch_size=100):
+    """Yield channel history in batches respecting rate limits."""
+    fetched = 0
+    before = None
+    while limit is None or fetched < limit:
+        pull = batch_size if limit is None else min(batch_size, limit - fetched)
+        while True:
+            try:
+                batch = [m async for m in channel.history(limit=pull, before=before)]
+                break
+            except discord.HTTPException as e:
+                if getattr(e, 'status', None) == 429:
+                    await asyncio.sleep(getattr(e, 'retry_after', 5))
+                else:
+                    raise
+        if not batch:
+            break
+        for message in batch:
+            yield message
+        fetched += len(batch)
+        before = batch[-1].id
+        await asyncio.sleep(0)
 
-async def fetch_reaction_users_with_retry(reaction):
-    """Fetch reaction users handling rate limits"""
+async def fetch_reaction_users_with_retry(reaction, batch_size=100):
+    """Yield users from a reaction while respecting rate limits."""
+    after = None
     while True:
         try:
-            return [u async for u in reaction.users()]
+            users = [u async for u in reaction.users(limit=batch_size, after=after)]
         except discord.HTTPException as e:
             if getattr(e, 'status', None) == 429:
                 await asyncio.sleep(getattr(e, 'retry_after', 5))
+                continue
             else:
                 raise
+        if not users:
+            break
+        for user in users:
+            yield user
+        after = users[-1]
+        await asyncio.sleep(0)
 
 async def check_starlock(chain, member, guild):
     """Check if a chain unlocks a StarLock"""
