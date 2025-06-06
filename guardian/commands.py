@@ -8,6 +8,7 @@ import os
 import json
 from datetime import datetime, timedelta
 import random
+from collections import defaultdict
 # ============ STARLOCK MANAGEMENT COMMANDS ============
 @bot.command(name='create_starkey')
 async def create_starkey(ctx, channel_name: str, *starkey_codes):
