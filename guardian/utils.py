@@ -136,40 +136,51 @@ async def get_member_by_reference(ctx, reference: str):
             return member
     
     return None
-async def fetch_history_batched(channel, limit=None, batch_size=100):
-    """Yield channel history in batches respecting rate limits."""
+async def fetch_history_batched(channel, limit=None, batch_size=100, base_delay=0.0):
+    """Yield channel history in batches with adaptive delays for rate limits."""
     fetched = 0
     before = None
+    delay = base_delay
     while limit is None or fetched < limit:
         pull = batch_size if limit is None else min(batch_size, limit - fetched)
         while True:
             try:
                 before_obj = discord.Object(id=before) if before else None
                 batch = [m async for m in channel.history(limit=pull, before=before_obj)]
+                # slowly reduce delay when successful
+                delay = max(0.0, delay * 0.9)
                 break
             except discord.HTTPException as e:
                 if getattr(e, 'status', None) == 429:
-                    await asyncio.sleep(getattr(e, 'retry_after', 5))
+                    wait = getattr(e, 'retry_after', 5)
+                    delay = min(delay + wait / max(pull, 1), 2.0)
+                    await asyncio.sleep(wait)
                 else:
                     raise
         if not batch:
             break
         for message in batch:
             yield message
+            if delay:
+                await asyncio.sleep(delay)
         fetched += len(batch)
         before = batch[-1].id
         await asyncio.sleep(0)
 
-async def fetch_reaction_users_with_retry(reaction, batch_size=100):
+async def fetch_reaction_users_with_retry(reaction, batch_size=100, base_delay=0.0):
     """Yield users from a reaction while respecting rate limits."""
     after = None
+    delay = base_delay
     while True:
         try:
             after_obj = discord.Object(id=after.id) if after else None
             users = [u async for u in reaction.users(limit=batch_size, after=after_obj)]
+            delay = max(0.0, delay * 0.9)
         except discord.HTTPException as e:
             if getattr(e, 'status', None) == 429:
-                await asyncio.sleep(getattr(e, 'retry_after', 5))
+                wait = getattr(e, 'retry_after', 5)
+                delay = min(delay + wait / max(batch_size, 1), 2.0)
+                await asyncio.sleep(wait)
                 continue
             else:
                 raise
@@ -177,6 +188,8 @@ async def fetch_reaction_users_with_retry(reaction, batch_size=100):
             break
         for user in users:
             yield user
+            if delay:
+                await asyncio.sleep(delay)
         after = users[-1]
         await asyncio.sleep(0)
 

@@ -840,22 +840,25 @@ async def backfill_server(ctx, limit: int = None):
     text_channels = [ch for ch in ctx.guild.channels if isinstance(ch, discord.TextChannel)]
     await update_log(f"📚 Found {len(text_channels)} text channels to process")
     
-    # Process each channel
-    for idx, channel in enumerate(text_channels):
+    # Process each channel concurrently
+    semaphore = asyncio.Semaphore(3)
+
+    async def process_channel(idx, channel):
+        nonlocal processed_messages, processed_reactions, existing_chains, existing_remories
         # Skip channels bot can't read
         if not channel.permissions_for(ctx.guild.me).read_message_history:
             stats["channels_skipped"] += 1
             await update_log(f"⚠️ Skipping #{channel.name} - no permissions", "WARN")
-            continue
-            
+            return
+
         stats["channels_processed"] += 1
         channel_start = datetime.now()
         channel_messages = 0
         channel_chains = 0
         channel_skipped = 0
-        
+
         await update_log(f"📂 Processing #{channel.name} ({idx+1}/{len(text_channels)})")
-        
+
         try:
             # Process messages in channel using batched fetches
             async for message in fetch_history_batched(channel, limit):
@@ -1025,21 +1028,31 @@ async def backfill_server(ctx, limit: int = None):
         except discord.Forbidden:
             stats["errors"] += 1
             await update_log(f"❌ No permission to read #{channel.name}", "ERROR")
-            continue
+            return
         except Exception as e:
             stats["errors"] += 1
             await update_log(f"❌ Error in #{channel.name}: {str(e)[:50]}", "ERROR")
             print(f"Full error: {e}")
-            continue
-        
-        # Save data every 10 channels
+            return
+
+        # Save data every 25 channels
         if idx % 25 == 0 and idx > 0:
             await update_log("💾 Saving checkpoint...")
             bot.save_data()
-        
+
         # Channel complete log
         channel_duration = (datetime.now() - channel_start).seconds
-        await update_log(f"✅ Completed #{channel.name}: {channel_messages} msgs ({channel_skipped} skipped), {channel_chains} new chains in {channel_duration}s")
+        await update_log(
+            f"✅ Completed #{channel.name}: {channel_messages} msgs ({channel_skipped} skipped), {channel_chains} new chains in {channel_duration}s"
+        )
+
+    async def worker(idx, channel):
+        async with semaphore:
+            await process_channel(idx, channel)
+
+    tasks = [asyncio.create_task(worker(i, ch)) for i, ch in enumerate(text_channels)]
+    for t in asyncio.as_completed(tasks):
+        await t
     
     # Post-processing: Assign roles based on accumulated stats
     await update_log("🎭 Starting role assignment phase...")
