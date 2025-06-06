@@ -373,6 +373,24 @@ def extract_emojis(text):
     )
     return emoji_pattern.findall(text)
 
+def find_contiguous_emoji_chains(text):
+    """Return lists of emojis that appear consecutively"""
+    emoji_pattern = re.compile("[\U0001F600-\U0001F64F]|[\U0001F300-\U0001F5FF]|[\U0001F680-\U0001F6FF]|[\U0001F1E0-\U0001F1FF]|[\U00002702-\U000027B0]|[\U000024C2-\U0001F251]|[\U0001f926-\U0001f937]|[\U00010000-\U0010ffff]|[\u200d]|[\u2640-\u2642]|[\u2600-\u2B55]|[\u23cf]|[\u23e9]|[\u231a]|[\ufe0f]|[\u3030]", flags=re.UNICODE)
+    chains=[]
+    current=[]
+    last_end=None
+    for m in emoji_pattern.finditer(text):
+        if last_end is not None and m.start()==last_end:
+            current.append(m.group())
+        else:
+            if len(current)>=2:
+                chains.append(current)
+            current=[m.group()]
+        last_end=m.end()
+    if len(current)>=2:
+        chains.append(current)
+    return chains
+
 def detect_starcode_chain(emojis):
     """Detect if emojis form a meaningful StarCode chain"""
     return len(emojis) >= 2
@@ -421,6 +439,27 @@ async def get_member_by_reference(ctx, reference: str):
             return member
     
     return None
+async def fetch_history_with_retry(channel, limit=None):
+    """Fetch channel history handling rate limits"""
+    while True:
+        try:
+            return [m async for m in channel.history(limit=limit)]
+        except discord.HTTPException as e:
+            if getattr(e, 'status', None) == 429:
+                await asyncio.sleep(getattr(e, 'retry_after', 5))
+            else:
+                raise
+
+async def fetch_reaction_users_with_retry(reaction):
+    """Fetch reaction users handling rate limits"""
+    while True:
+        try:
+            return [u async for u in reaction.users()]
+        except discord.HTTPException as e:
+            if getattr(e, 'status', None) == 429:
+                await asyncio.sleep(getattr(e, 'retry_after', 5))
+            else:
+                raise
 
 async def check_starlock(chain, member, guild):
     """Check if a chain unlocks a StarLock"""
@@ -759,9 +798,9 @@ async def on_reaction_add(reaction, user):
     if str(reaction.emoji) == "🛡️" and user.id in bot.shield_listeners:
         # This is a marking action
         message = reaction.message
-        emojis = extract_emojis(message.content)
-        
-        if len(emojis) >= 2:
+        sequences = find_contiguous_emoji_chains(message.content)
+        if sequences:
+            emojis = sequences[0]
             chain_key = "".join(emojis)
             
             # Remove from pending chains immediately
@@ -842,13 +881,10 @@ async def on_message(message):
     if message.author.bot:
         return
     
-    # Detect ALL emoji chains in message content
-    emojis = extract_emojis(message.content)
-    
-    if len(emojis) >= 2 and detect_starcode_chain(emojis):
+    emoji_sequences = find_contiguous_emoji_chains(message.content)
+    for emojis in emoji_sequences:
         chain_key = "".join(emojis)
-        
-        # Add to pending chains for auto-registration
+
         bot.pending_chains[f"{message.id}_{chain_key}"] = {
             "chain": emojis,
             "author": message.author.id,
@@ -858,11 +894,9 @@ async def on_message(message):
             "timestamp": datetime.now(),
             "content": message.content
         }
-        
-        # React to show it's detected
+
         await message.add_reaction("✨")
-        
-        # Store as remory string
+
         remory = {
             "author": message.author.id,
             "chain": emojis,
@@ -872,16 +906,13 @@ async def on_message(message):
             "message_id": message.id
         }
         bot.user_data[message.author.id]["remory_strings"].append(remory)
-        
-        # Check for StarLock unlock
+
         unlock_message = await check_starlock(emojis, message.author, message.guild)
         if unlock_message:
             await message.channel.send(unlock_message)
-        
-        # Check if this completes a training quest
+
         if await check_training_progress(message.author.id, "message", message.content, message.channel):
             await complete_training_quest(message.author, message.channel)
-    
     await bot.process_commands(message)
 
 async def complete_training_quest(user, channel):
@@ -1005,22 +1036,21 @@ async def auto_register_chains():
                 "reversible": True
             })
             
-            # Notify in channel if possible
+            # Notify in vault channel if possible
             try:
-                channel = bot.get_channel(chain_data["channel_id"])
+                vault_id = bot.get_channel_for_feature(chain_data['guild_id'], 'remory_archive')
+                channel = bot.get_channel(int(vault_id)) if vault_id else None
                 if channel:
                     embed = discord.Embed(
-                        title="✨ StarCode Auto-Registered",
-                        description=f"Pattern **{chain_key}** has been registered",
+                        title='✨ StarCode Auto-Registered',
+                        description=f'Pattern **{chain_key}** has been registered',
                         color=0x90EE90
                     )
-                    embed.add_field(name="Author", value=f"<@{chain_data['author']}>")
-                    embed.set_footer(text="Chain persisted for 1 minute without correction")
+                    embed.add_field(name='Author', value=f'<@{chain_data["author"]}>')
+                    embed.set_footer(text='Chain persisted for 1 minute without correction')
                     await channel.send(embed=embed)
-            except:
+            except Exception:
                 pass
-        
-        # Remove from pending
         del bot.pending_chains[key]
 
 # ============ STARLOCK MANAGEMENT COMMANDS ============
@@ -1866,7 +1896,8 @@ async def backfill_server(ctx, limit: int = None):
         
         try:
             # Process messages in channel
-            async for message in channel.history(limit=limit):
+            messages = await fetch_history_with_retry(channel, limit)
+            for message in messages:
                 if message.author.bot:
                     continue
                 
@@ -1905,13 +1936,15 @@ async def backfill_server(ctx, limit: int = None):
                     await update_log(f"  └─ {channel_messages} messages in #{channel.name} ({channel_skipped} skipped)")
                 
                 # Extract emojis from message
-                emojis = extract_emojis(message.content)
+                all_emojis = extract_emojis(message.content)
+                sequences = find_contiguous_emoji_chains(message.content)
+                emojis = sequences[0] if sequences else []
                 
                 # Track unique emojis
-                stats["emoji_unique"].update(emojis)
+                stats["emoji_unique"].update(all_emojis)
                 
                 # Process emoji chains
-                if len(emojis) >= 2 and detect_starcode_chain(emojis):
+                if emojis:
                     stats["chains_found"] += 1
                     chain_key = "".join(emojis)
                     
@@ -1972,7 +2005,7 @@ async def backfill_server(ctx, limit: int = None):
                     emoji = str(reaction.emoji)
                     
                     # Get reaction users
-                    async for user in reaction.users():
+                    for user in await fetch_reaction_users_with_retry(reaction):
                         if user.bot:
                             continue
                         
@@ -2038,7 +2071,7 @@ async def backfill_server(ctx, limit: int = None):
             continue
         
         # Save data every 10 channels
-        if idx % 10 == 0 and idx > 0:
+        if idx % 25 == 0 and idx > 0:
             await update_log("💾 Saving checkpoint...")
             bot.save_data()
         
