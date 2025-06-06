@@ -144,7 +144,8 @@ async def fetch_history_batched(channel, limit=None, batch_size=100):
         pull = batch_size if limit is None else min(batch_size, limit - fetched)
         while True:
             try:
-                batch = [m async for m in channel.history(limit=pull, before=before)]
+                before_obj = discord.Object(id=before) if before else None
+                batch = [m async for m in channel.history(limit=pull, before=before_obj)]
                 break
             except discord.HTTPException as e:
                 if getattr(e, 'status', None) == 429:
@@ -164,7 +165,8 @@ async def fetch_reaction_users_with_retry(reaction, batch_size=100):
     after = None
     while True:
         try:
-            users = [u async for u in reaction.users(limit=batch_size, after=after)]
+            after_obj = discord.Object(id=after.id) if after else None
+            users = [u async for u in reaction.users(limit=batch_size, after=after_obj)]
         except discord.HTTPException as e:
             if getattr(e, 'status', None) == 429:
                 await asyncio.sleep(getattr(e, 'retry_after', 5))
