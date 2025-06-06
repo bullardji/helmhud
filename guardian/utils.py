@@ -11,6 +11,7 @@ from PIL import Image
 import magic
 import bleach
 import time
+from .config import ROLES_CONFIG, DEFAULT_STARLOCKS, DEFAULT_TRAINING_QUESTS
 def extract_emojis(text):
     """Extract all emojis from text using regex"""
     emoji_pattern = re.compile(
