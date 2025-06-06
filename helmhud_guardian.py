@@ -2,8 +2,14 @@
 """Entry point for Helmhud Guardian bot"""
 
 import os
+import logging
 from dotenv import load_dotenv
 from guardian import bot
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s",
+)
 
 load_dotenv()
 

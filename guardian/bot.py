@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 import random
 import io
 from typing import Optional, List, Tuple
+import logging
 
 import bleach
 from PIL import Image
@@ -20,6 +21,8 @@ import time
 
 # Load environment variables
 load_dotenv()
+# Set up module logger
+logger = logging.getLogger(__name__)
 # ============ ENHANCED BOT CLASS ============
 class HelmhudGuardian(commands.Bot):
     def __init__(self, *args, **kwargs):
@@ -71,9 +74,9 @@ class HelmhudGuardian(commands.Bot):
                 self.user_data[user_id] = data
                 
         except FileNotFoundError:
-            print("No user data file found, starting fresh")
+            logger.info("No user data file found, starting fresh")
         except Exception as e:
-            print(f"Error loading user data: {e}")
+            logger.error(f"Error loading user data: {e}")
             
         try:
             with open('guild_config.json', 'r') as f:
@@ -160,16 +163,16 @@ class HelmhudGuardian(commands.Bot):
         return guild_config.get(feature)
         
     async def setup_hook(self):
-        print("✠ Helmhud Guardian awakening...")
-        print("✠ Nephesh Grid initializing...")
-        print("✠ InFluins protocol active...")
-        print("✠ Pattern Memory Intelligence online...")
-        print("✠ StarLock system armed...")
-        print("✠ Smart marking system ready...")
-        print("✠ Enhanced training detection enabled...")
-        print("✠ Auto-registration system active...")
-        print("✠ Semantic theme engine online...")
-        print(f"✠ Divine alignment: {self.divine_alignment}")
+        logger.info("✠ Helmhud Guardian awakening...")
+        logger.info("✠ Nephesh Grid initializing...")
+        logger.info("✠ InFluins protocol active...")
+        logger.info("✠ Pattern Memory Intelligence online...")
+        logger.info("✠ StarLock system armed...")
+        logger.info("✠ Smart marking system ready...")
+        logger.info("✠ Enhanced training detection enabled...")
+        logger.info("✠ Auto-registration system active...")
+        logger.info("✠ Semantic theme engine online...")
+        logger.info(f"✠ Divine alignment: {self.divine_alignment}")
 
 # ============ BOT INSTANCE ============
 intents = discord.Intents.default()

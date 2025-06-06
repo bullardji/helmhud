@@ -1,5 +1,6 @@
 import discord
 from .bot import bot
+import logging
 import asyncio
 import re
 from datetime import datetime, timedelta
@@ -12,6 +13,8 @@ import magic
 import bleach
 import time
 from .config import ROLES_CONFIG, DEFAULT_STARLOCKS, DEFAULT_TRAINING_QUESTS
+
+logger = logging.getLogger(__name__)
 def extract_emojis(text):
     """Extract all emojis from text using regex"""
     emoji_pattern = re.compile(
@@ -58,7 +61,7 @@ async def safe_add_roles(member, *roles):
     try:
         await member.add_roles(*roles)
     except discord.Forbidden:
-        print(f"Missing permissions to add roles for {member}")
+        logger.warning(f"Missing permissions to add roles for {member}")
     except discord.HTTPException as e:
         if getattr(e, 'status', None) == 429:
             await asyncio.sleep(getattr(e, 'retry_after', 5))
@@ -502,7 +505,9 @@ async def unregister_chain(chain_key, reason="unspecified", by_user_id=None):
         del bot.blessed_chains[chain_key]
     
     # Log unregistration
-    print(f"Unregistered chain {chain_key} - Reason: {reason}, By: {by_user_id}")
+    logger.info(
+        f"Unregistered chain {chain_key} - Reason: {reason}, By: {by_user_id}"
+    )
     
     return True
 

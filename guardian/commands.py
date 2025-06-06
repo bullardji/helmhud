@@ -9,6 +9,9 @@ import json
 from datetime import datetime, timedelta
 import random
 from collections import defaultdict
+import logging
+
+logger = logging.getLogger(__name__)
 # ============ STARLOCK MANAGEMENT COMMANDS ============
 @bot.command(name='create_starkey')
 async def create_starkey(ctx, channel_name: str, *starkey_codes):
@@ -773,6 +776,9 @@ async def backfill_server(ctx, limit: int = None):
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = f"`[{timestamp}] {level}:` {message}"
         log_buffer.append(log_entry)
+
+        level_map = {"INFO": logging.INFO, "WARN": logging.WARNING, "ERROR": logging.ERROR}
+        logger.log(level_map.get(level, logging.INFO), message)
         
         # Update log every 10 entries or 5 seconds
         if len(log_buffer) >= 10 or (datetime.now() - stats["last_update"]).seconds >= 5:
@@ -4004,7 +4010,7 @@ async def view_reports(ctx):
 async def cleanup_report_cooldowns():
     """Clean up old report cooldowns to prevent memory bloat"""
     report_rate_limiter.cleanup_old_entries(300)  # Clean entries older than 5 minutes
-    print(f"[CLEANUP] Report cooldowns cleaned")
+    logger.info("[CLEANUP] Report cooldowns cleaned")
 
 
 # ============ ERROR HANDLING ============
@@ -4018,13 +4024,15 @@ async def on_command_error(ctx, error):
         await ctx.send(f"❌ Missing required argument: {error.param.name}")
     else:
         await ctx.send(f"⚠️ Vault error: {error}")
-        print(f"Error in {ctx.command}: {error}")
+        logger.error(f"Error in {ctx.command}: {error}")
         import traceback
         traceback.print_exc()
 
 
 # ============ GLOBAL ROLE SYNC ============
-async def sync_user_roles_across_servers(user_id: int, source_guild: discord.Guild = None):
+async def sync_user_roles_across_servers(
+    user_id: int, source_guild: discord.Guild = None, silent: bool = False
+):
     """Sync a user's earned roles across all servers they're in"""
     user_stats = bot.user_data.get(user_id)
     if not user_stats:
@@ -4057,15 +4065,22 @@ async def sync_user_roles_across_servers(user_id: int, source_guild: discord.Gui
         "roles_added": 0,
         "errors": 0
     }
-    
+    logger.info(f"Starting role sync for user {user_id}")
+
     # Check all guilds the bot is in
     for guild in bot.guilds:
         sync_results["servers_checked"] += 1
-        
+
         # Skip the source guild if provided (already handled)
         if source_guild and guild.id == source_guild.id:
             continue
-        
+
+        if not guild.me.guild_permissions.manage_roles:
+            logger.warning(
+                f"Skipping {guild.name} - missing manage_roles permission"
+            )
+            continue
+
         # Check if user is in this guild
         member = guild.get_member(user_id)
         if not member:
@@ -4097,7 +4112,9 @@ async def sync_user_roles_across_servers(user_id: int, source_guild: discord.Gui
                     sync_results["errors"] += 1
                     continue
                 except Exception as e:
-                    print(f"Error creating role {role_name} in {guild.name}: {e}")
+                    logger.error(
+                        f"Error creating role {role_name} in {guild.name}: {e}"
+                    )
                     sync_results["errors"] += 1
                     continue
             
@@ -4106,43 +4123,48 @@ async def sync_user_roles_across_servers(user_id: int, source_guild: discord.Gui
                 await safe_add_roles(member, role)
                 sync_results["roles_added"] += 1
                 roles_added_here = True
-                
-                # Try to announce in progression channel
-                channel_id = bot.get_channel_for_feature(guild.id, "vault_progression")
-                if channel_id:
-                    channel = guild.get_channel(int(channel_id))
-                else:
-                    channel = discord.utils.get(guild.channels, name="vault-progression")
-                
-                if channel:
-                    embed = discord.Embed(
-                        title="✨ Role Sync ✨",
-                        description=f"{member.mention} has been granted **{role_name}**",
-                        color=role_config["color"]
-                    )
-                    embed.add_field(
-                        name="Synced From",
-                        value=f"Another server ({source_guild.name if source_guild else 'Unknown'})",
-                        inline=False
-                    )
-                    embed.set_footer(text="Cross-server role synchronization")
-                    
-                    try:
-                        await channel.send(embed=embed)
-                    except:
-                        pass  # Silent fail on announcement
-                        
+
+                if not silent:
+                    channel_id = bot.get_channel_for_feature(guild.id, "vault_progression")
+                    if channel_id:
+                        channel = guild.get_channel(int(channel_id))
+                    else:
+                        channel = discord.utils.get(guild.channels, name="vault-progression")
+
+                    if channel:
+                        embed = discord.Embed(
+                            title="✨ Role Sync ✨",
+                            description=f"{member.mention} has been granted **{role_name}**",
+                            color=role_config["color"]
+                        )
+                        embed.add_field(
+                            name="Synced From",
+                            value=f"Another server ({source_guild.name if source_guild else 'Unknown'})",
+                            inline=False
+                        )
+                        embed.set_footer(text="Cross-server role synchronization")
+
+                        try:
+                            await channel.send(embed=embed)
+                        except Exception:
+                            pass  # Silent fail on announcement
+
             except discord.Forbidden:
                 sync_results["errors"] += 1
                 continue
             except Exception as e:
-                print(f"Error adding role {role_name} to {member} in {guild.name}: {e}")
+                logger.error(
+                    f"Error adding role {role_name} to {member} in {guild.name}: {e}"
+                )
                 sync_results["errors"] += 1
                 continue
         
         if roles_added_here:
             sync_results["servers_updated"] += 1
-    
+
+    logger.info(
+        f"Role sync for {user_id}: {sync_results['roles_added']} roles added across {sync_results['servers_updated']} servers with {sync_results['errors']} errors"
+    )
     return sync_results
 
 # ============ MODIFIED ROLE PROGRESSION ============
@@ -4225,8 +4247,8 @@ async def check_role_progression(member, guild):
     
     # If any new roles were earned, sync across all servers
     if new_roles_earned:
-        sync_results = await sync_user_roles_across_servers(member.id, guild)
-        print(f"Role sync for {member}: {sync_results}")
+        sync_results = await sync_user_roles_across_servers(member.id, guild, silent=True)
+        logger.info(f"Role sync for {member}: {sync_results}")
 
 # ============ MEMBER JOIN EVENT ============
 @bot.event
@@ -4315,44 +4337,60 @@ async def on_member_join(member):
                 await channel.send(embed=embed)
                 
         except discord.Forbidden:
-            print(f"Could not add roles to {member} in {guild.name} - missing permissions")
+            logger.warning(f"Could not add roles to {member} in {guild.name} - missing permissions")
         except Exception as e:
-            print(f"Error adding roles on join: {e}")
+            logger.error(f"Error adding roles on join: {e}")
 
 
 # ============ SYNC COMMAND ============
 @bot.command(name='sync_roles')
-async def sync_roles(ctx, target: str = None):
-    """Manually sync your roles across all servers (or sync another user if admin)"""
+async def sync_roles(ctx, *, args: str = None):
+    """Manually sync your roles across all servers (or sync another user if admin)
     
-    if target and ctx.author.guild_permissions.administrator:
-        # Admin syncing another user
-        member = await get_member_by_reference(ctx, target)
+    Usage: !vault sync_roles [user] [silent]
+    """
+
+    silent = False
+    target_ref = None
+    if args:
+        parts = args.split()
+        parts_lower = [p.lower() for p in parts]
+        if "silent" in parts_lower:
+            silent = True
+            parts = [p for p in parts if p.lower() != "silent"]
+        if parts:
+            target_ref = parts[0]
+
+    if target_ref and ctx.author.guild_permissions.administrator:
+        member = await get_member_by_reference(ctx, target_ref)
         if not member:
-            await ctx.send(f"❌ Could not find user: {target}")
+            await ctx.send(f"❌ Could not find user: {target_ref}")
             return
         user_to_sync = member
     else:
-        # User syncing themselves
         user_to_sync = ctx.author
-    
-    # Start sync
-    embed = discord.Embed(
-        title="🔄 Syncing Roles...",
-        description=f"Checking role qualifications across all servers for {user_to_sync.mention}",
-        color=0x87CEEB
+
+    if not silent:
+        status_embed = discord.Embed(
+            title="🔄 Syncing Roles...",
+            description=f"Checking role qualifications across all servers for {user_to_sync.mention}",
+            color=0x87CEEB,
+        )
+        msg = await ctx.send(embed=status_embed)
+    else:
+        msg = None
+
+    sync_results = await sync_user_roles_across_servers(
+        user_to_sync.id, ctx.guild, silent=silent
     )
-    msg = await ctx.send(embed=embed)
-    
-    # Perform sync
-    sync_results = await sync_user_roles_across_servers(user_to_sync.id, ctx.guild)
-    
-    # Update embed with results
-    embed.title = "✅ Role Sync Complete"
-    embed.description = f"Synchronized roles for {user_to_sync.mention}"
-    embed.color = 0x00FF00
-    
-    embed.add_field(
+
+    result = discord.Embed(
+        title="✅ Role Sync Complete",
+        description=f"Synchronized roles for {user_to_sync.mention}",
+        color=0x00FF00,
+    )
+
+    result.add_field(
         name="📊 Results",
         value=f"Servers checked: **{sync_results['servers_checked']}**\n"
               f"Servers updated: **{sync_results['servers_updated']}**\n"
@@ -4360,27 +4398,32 @@ async def sync_roles(ctx, target: str = None):
               f"Errors: **{sync_results['errors']}**",
         inline=False
     )
-    
+
     if sync_results['roles_added'] > 0:
-        embed.add_field(
+        result.add_field(
             name="✨ Success",
             value=f"Added {sync_results['roles_added']} missing roles across {sync_results['servers_updated']} servers!",
             inline=False
         )
     else:
-        embed.add_field(
+        result.add_field(
             name="ℹ️ Status",
             value="All roles are already synchronized!",
             inline=False
         )
-    
-    await safe_edit_message(msg, embed=embed)
+
+    if msg:
+        await safe_edit_message(msg, embed=result)
+    else:
+        await ctx.send(embed=result)
 
 # ============ GLOBAL SYNC COMMAND (ADMIN) ============
 @bot.command(name='sync_all_roles')
 @commands.has_permissions(administrator=True)
-async def sync_all_roles(ctx):
+async def sync_all_roles(ctx, mode: str = None):
     """Admin: Sync roles for ALL users across ALL servers"""
+
+    silent = mode and mode.lower() == "silent"
     
     confirm_embed = discord.Embed(
         title="⚠️ Global Role Sync",
@@ -4410,20 +4453,21 @@ async def sync_all_roles(ctx):
     progress_embed = discord.Embed(
         title="🔄 Global Role Sync in Progress...",
         description="Synchronizing all users across all servers",
-        color=0x87CEEB
+        color=0x87CEEB,
     )
-    await safe_edit_message(msg, embed=progress_embed)
-    
+    if not silent:
+        await safe_edit_message(msg, embed=progress_embed)
+
     total_users = 0
     total_roles_added = 0
     total_errors = 0
-    
+
     for user_id in bot.user_data:
-        if total_users % 10 == 0:
+        if not silent and total_users % 10 == 0:
             progress_embed.description = f"Processing user {total_users}/{len(bot.user_data)}..."
             await safe_edit_message(msg, embed=progress_embed)
-        
-        results = await sync_user_roles_across_servers(user_id)
+
+        results = await sync_user_roles_across_servers(user_id, silent=silent)
         total_roles_added += results['roles_added']
         total_errors += results['errors']
         total_users += 1
@@ -4443,7 +4487,10 @@ async def sync_all_roles(ctx):
         inline=False
     )
     
-    await safe_edit_message(msg, embed=complete_embed)
+    if not silent and msg:
+        await safe_edit_message(msg, embed=complete_embed)
+    else:
+        await ctx.send(embed=complete_embed)
 
 # ============ TEST SUITE COMMAND ============
 @bot.command(name='test_suite')
