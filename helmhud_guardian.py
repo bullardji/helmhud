@@ -373,6 +373,48 @@ def extract_emojis(text):
     )
     return emoji_pattern.findall(text)
 
+def find_contiguous_emoji_chains(text):
+    """Return lists of emojis that appear consecutively"""
+    emoji_pattern = re.compile("[\U0001F600-\U0001F64F]|[\U0001F300-\U0001F5FF]|[\U0001F680-\U0001F6FF]|[\U0001F1E0-\U0001F1FF]|[\U00002702-\U000027B0]|[\U000024C2-\U0001F251]|[\U0001f926-\U0001f937]|[\U00010000-\U0010ffff]|[\u200d]|[\u2640-\u2642]|[\u2600-\u2B55]|[\u23cf]|[\u23e9]|[\u231a]|[\ufe0f]|[\u3030]", flags=re.UNICODE)
+    chains=[]
+    current=[]
+    last_end=None
+    for m in emoji_pattern.finditer(text):
+        if last_end is not None and m.start()==last_end:
+            current.append(m.group())
+        else:
+            if len(current)>=2:
+                chains.append(current)
+            current=[m.group()]
+        last_end=m.end()
+    if len(current)>=2:
+        chains.append(current)
+    return chains
+
+async def safe_add_roles(member, *roles):
+    """Add roles handling rate limits and missing permissions"""
+    try:
+        await member.add_roles(*roles)
+    except discord.Forbidden:
+        print(f"Missing permissions to add roles for {member}")
+    except discord.HTTPException as e:
+        if getattr(e, 'status', None) == 429:
+            await asyncio.sleep(getattr(e, 'retry_after', 5))
+            await safe_add_roles(member, *roles)
+        else:
+            raise
+
+async def safe_edit_message(message, **kwargs):
+    """Edit a message handling rate limits"""
+    while True:
+        try:
+            return await message.edit(**kwargs)
+        except discord.HTTPException as e:
+            if getattr(e, 'status', None) == 429:
+                await asyncio.sleep(getattr(e, 'retry_after', 5))
+            else:
+                raise
+
 def detect_starcode_chain(emojis):
     """Detect if emojis form a meaningful StarCode chain"""
     return len(emojis) >= 2
@@ -421,6 +463,27 @@ async def get_member_by_reference(ctx, reference: str):
             return member
     
     return None
+async def fetch_history_with_retry(channel, limit=None):
+    """Fetch channel history handling rate limits"""
+    while True:
+        try:
+            return [m async for m in channel.history(limit=limit)]
+        except discord.HTTPException as e:
+            if getattr(e, 'status', None) == 429:
+                await asyncio.sleep(getattr(e, 'retry_after', 5))
+            else:
+                raise
+
+async def fetch_reaction_users_with_retry(reaction):
+    """Fetch reaction users handling rate limits"""
+    while True:
+        try:
+            return [u async for u in reaction.users()]
+        except discord.HTTPException as e:
+            if getattr(e, 'status', None) == 429:
+                await asyncio.sleep(getattr(e, 'retry_after', 5))
+            else:
+                raise
 
 async def check_starlock(chain, member, guild):
     """Check if a chain unlocks a StarLock"""
@@ -460,7 +523,7 @@ async def check_starlock(chain, member, guild):
                         mentionable=True
                     )
                 
-                await member.add_roles(role)
+                await safe_add_roles(member, role)
                 return f"🔓 **StarLock Unlocked!** Granted role: **{role.name}**"
     
     # Then check default starlocks
@@ -497,7 +560,7 @@ async def check_starlock(chain, member, guild):
                         mentionable=True
                     )
                 
-                await member.add_roles(role)
+                await safe_add_roles(member, role)
                 return f"🔓 **StarLock Unlocked!** Granted role: **{role.name}**"
     
     return None
@@ -543,7 +606,7 @@ async def check_role_progression(member, guild):
                     mentionable=True
                 )
             
-            await member.add_roles(role)
+            await safe_add_roles(member, role)
             
             # Announce progression
             channel_id = bot.get_channel_for_feature(guild.id, "vault_progression")
@@ -759,9 +822,9 @@ async def on_reaction_add(reaction, user):
     if str(reaction.emoji) == "🛡️" and user.id in bot.shield_listeners:
         # This is a marking action
         message = reaction.message
-        emojis = extract_emojis(message.content)
-        
-        if len(emojis) >= 2:
+        sequences = find_contiguous_emoji_chains(message.content)
+        if sequences:
+            emojis = sequences[0]
             chain_key = "".join(emojis)
             
             # Remove from pending chains immediately
@@ -842,13 +905,10 @@ async def on_message(message):
     if message.author.bot:
         return
     
-    # Detect ALL emoji chains in message content
-    emojis = extract_emojis(message.content)
-    
-    if len(emojis) >= 2 and detect_starcode_chain(emojis):
+    emoji_sequences = find_contiguous_emoji_chains(message.content)
+    for emojis in emoji_sequences:
         chain_key = "".join(emojis)
-        
-        # Add to pending chains for auto-registration
+
         bot.pending_chains[f"{message.id}_{chain_key}"] = {
             "chain": emojis,
             "author": message.author.id,
@@ -858,11 +918,9 @@ async def on_message(message):
             "timestamp": datetime.now(),
             "content": message.content
         }
-        
-        # React to show it's detected
+
         await message.add_reaction("✨")
-        
-        # Store as remory string
+
         remory = {
             "author": message.author.id,
             "chain": emojis,
@@ -872,16 +930,13 @@ async def on_message(message):
             "message_id": message.id
         }
         bot.user_data[message.author.id]["remory_strings"].append(remory)
-        
-        # Check for StarLock unlock
+
         unlock_message = await check_starlock(emojis, message.author, message.guild)
         if unlock_message:
             await message.channel.send(unlock_message)
-        
-        # Check if this completes a training quest
+
         if await check_training_progress(message.author.id, "message", message.content, message.channel):
             await complete_training_quest(message.author, message.channel)
-    
     await bot.process_commands(message)
 
 async def complete_training_quest(user, channel):
@@ -1005,22 +1060,21 @@ async def auto_register_chains():
                 "reversible": True
             })
             
-            # Notify in channel if possible
+            # Notify in vault channel if possible
             try:
-                channel = bot.get_channel(chain_data["channel_id"])
+                vault_id = bot.get_channel_for_feature(chain_data['guild_id'], 'remory_archive')
+                channel = bot.get_channel(int(vault_id)) if vault_id else None
                 if channel:
                     embed = discord.Embed(
-                        title="✨ StarCode Auto-Registered",
-                        description=f"Pattern **{chain_key}** has been registered",
+                        title='✨ StarCode Auto-Registered',
+                        description=f'Pattern **{chain_key}** has been registered',
                         color=0x90EE90
                     )
-                    embed.add_field(name="Author", value=f"<@{chain_data['author']}>")
-                    embed.set_footer(text="Chain persisted for 1 minute without correction")
+                    embed.add_field(name='Author', value=f'<@{chain_data["author"]}>')
+                    embed.set_footer(text='Chain persisted for 1 minute without correction')
                     await channel.send(embed=embed)
-            except:
+            except Exception:
                 pass
-        
-        # Remove from pending
         del bot.pending_chains[key]
 
 # ============ STARLOCK MANAGEMENT COMMANDS ============
@@ -1301,7 +1355,10 @@ async def list_starlocks(ctx):
             inline=False
         )
     
-    await ctx.send(embed=embed)
+    vault_id = bot.get_channel_for_feature(ctx.guild.id, 'remory_archive')
+    vault_channel = bot.get_channel(int(vault_id)) if vault_id else None
+    if vault_channel:
+        await vault_channel.send(embed=embed)
 
 # ============ PROFILE COMMAND WITH FIXES ============
 @bot.command(name='profile')
@@ -1475,7 +1532,10 @@ async def profile(ctx, *, target: str = None):
     
     embed.set_footer(text=f"Account created: {created_date} | Joined server: {joined_date}")
     
-    await ctx.send(embed=embed)
+    vault_id = bot.get_channel_for_feature(ctx.guild.id, 'remory_archive')
+    vault_channel = bot.get_channel(int(vault_id)) if vault_id else None
+    if vault_channel:
+        await vault_channel.send(embed=embed)
 
 # ============ DIAGNOSTIC COMMAND ============
 @bot.command(name='diagnose')
@@ -1802,7 +1862,7 @@ async def backfill_server(ctx, limit: int = None):
                 inline=True
             )
             
-            await log_msg.edit(embed=log_embed)
+            await safe_edit_message(log_msg, embed=log_embed)
             stats["last_update"] = datetime.now()
     
     # Set up initial log fields
@@ -1866,7 +1926,8 @@ async def backfill_server(ctx, limit: int = None):
         
         try:
             # Process messages in channel
-            async for message in channel.history(limit=limit):
+            messages = await fetch_history_with_retry(channel, limit)
+            for message in messages:
                 if message.author.bot:
                     continue
                 
@@ -1905,13 +1966,15 @@ async def backfill_server(ctx, limit: int = None):
                     await update_log(f"  └─ {channel_messages} messages in #{channel.name} ({channel_skipped} skipped)")
                 
                 # Extract emojis from message
-                emojis = extract_emojis(message.content)
+                all_emojis = extract_emojis(message.content)
+                sequences = find_contiguous_emoji_chains(message.content)
+                emojis = sequences[0] if sequences else []
                 
                 # Track unique emojis
-                stats["emoji_unique"].update(emojis)
+                stats["emoji_unique"].update(all_emojis)
                 
                 # Process emoji chains
-                if len(emojis) >= 2 and detect_starcode_chain(emojis):
+                if emojis:
                     stats["chains_found"] += 1
                     chain_key = "".join(emojis)
                     
@@ -1972,7 +2035,7 @@ async def backfill_server(ctx, limit: int = None):
                     emoji = str(reaction.emoji)
                     
                     # Get reaction users
-                    async for user in reaction.users():
+                    for user in await fetch_reaction_users_with_retry(reaction):
                         if user.bot:
                             continue
                         
@@ -2038,7 +2101,7 @@ async def backfill_server(ctx, limit: int = None):
             continue
         
         # Save data every 10 channels
-        if idx % 10 == 0 and idx > 0:
+        if idx % 25 == 0 and idx > 0:
             await update_log("💾 Saving checkpoint...")
             bot.save_data()
         
@@ -2109,7 +2172,7 @@ async def backfill_server(ctx, limit: int = None):
                     await update_log(f"🎨 Created role: {role_name}")
                 
                 try:
-                    await member.add_roles(role)
+                    await safe_add_roles(member, role)
                     stats["roles_assigned"][role_name] += 1
                     user_roles_assigned.append(role_name)
                 except Exception as e:
@@ -3226,7 +3289,10 @@ async def starcode(ctx, *, pattern: str):
             inline=False
         )
     
-    await ctx.send(embed=embed)
+    vault_id = bot.get_channel_for_feature(ctx.guild.id, 'remory_archive')
+    vault_channel = bot.get_channel(int(vault_id)) if vault_id else None
+    if vault_channel:
+        await vault_channel.send(embed=embed)
 
 @bot.command(name='pending')
 async def view_pending(ctx):
@@ -3964,7 +4030,7 @@ async def batch_commands(ctx, *, commands_text: str):
         )
     
     # Update the status message
-    await status_msg.edit(embed=embed)
+    await safe_edit_message(status_msg, embed=embed)
 
 @bot.command(name='info')
 async def vault_info(ctx):
@@ -5093,7 +5159,7 @@ async def sync_user_roles_across_servers(user_id: int, source_guild: discord.Gui
             
             # Add role to member
             try:
-                await member.add_roles(role)
+                await safe_add_roles(member, role)
                 sync_results["roles_added"] += 1
                 roles_added_here = True
                 
@@ -5179,7 +5245,7 @@ async def check_role_progression(member, guild):
                     mentionable=True
                 )
             
-            await member.add_roles(role)
+            await safe_add_roles(member, role)
             new_roles_earned.append((role_key, config))
             
             # Announce progression
@@ -5272,7 +5338,7 @@ async def on_member_join(member):
     # Add all roles at once
     if roles_to_add:
         try:
-            await member.add_roles(*roles_to_add)
+            await safe_add_roles(member, *roles_to_add)
             
             # Announce if progression channel exists
             channel_id = bot.get_channel_for_feature(guild.id, "vault_progression")
@@ -5364,7 +5430,7 @@ async def sync_roles(ctx, target: str = None):
             inline=False
         )
     
-    await msg.edit(embed=embed)
+    await safe_edit_message(msg, embed=embed)
 
 # ============ GLOBAL SYNC COMMAND (ADMIN) ============
 @bot.command(name='sync_all_roles')
@@ -5402,7 +5468,7 @@ async def sync_all_roles(ctx):
         description="Synchronizing all users across all servers",
         color=0x87CEEB
     )
-    await msg.edit(embed=progress_embed)
+    await safe_edit_message(msg, embed=progress_embed)
     
     total_users = 0
     total_roles_added = 0
@@ -5411,7 +5477,7 @@ async def sync_all_roles(ctx):
     for user_id in bot.user_data:
         if total_users % 10 == 0:
             progress_embed.description = f"Processing user {total_users}/{len(bot.user_data)}..."
-            await msg.edit(embed=progress_embed)
+            await safe_edit_message(msg, embed=progress_embed)
         
         results = await sync_user_roles_across_servers(user_id)
         total_roles_added += results['roles_added']
@@ -5433,7 +5499,7 @@ async def sync_all_roles(ctx):
         inline=False
     )
     
-    await msg.edit(embed=complete_embed)
+    await safe_edit_message(msg, embed=complete_embed)
 
 # ============ TEST SUITE COMMAND ============
 @bot.command(name='test_suite')
@@ -5498,7 +5564,7 @@ async def test_suite(ctx):
                 inline=False
             )
         
-        await test_msg.edit(embed=test_report)
+        await safe_edit_message(test_msg, embed=test_report)
     
     try:
         # Test 1: User Profile Creation
@@ -6120,7 +6186,7 @@ async def test_suite(ctx):
             cleanup_embed.color = 0xFF0000
             print(f"Cleanup error: {e}")
         
-        await test_msg.edit(embed=cleanup_embed)
+        await safe_edit_message(test_msg, embed=cleanup_embed)
         
         # Final summary
         total_tests = len(test_data["test_results"])
@@ -6280,7 +6346,7 @@ async def test_commands(ctx):
         )
     
     embed.set_footer(text=f"Tested {len(commands_to_test)} commands")
-    await msg.edit(embed=embed)
+    await safe_edit_message(msg, embed=embed)
 
 # ============ RUN BOT ============
 if __name__ == "__main__":
