@@ -61,7 +61,7 @@ async def safe_add_roles(member, *roles):
     try:
         await member.add_roles(*roles)
     except discord.Forbidden:
-        logger.warning(f"Missing permissions to add roles for {member}")
+        logger.debug(f"Missing permissions to add roles for {member}")
     except discord.HTTPException as e:
         if getattr(e, 'status', None) == 429:
             await asyncio.sleep(getattr(e, 'retry_after', 5))

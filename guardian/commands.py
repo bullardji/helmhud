@@ -448,8 +448,9 @@ async def profile(ctx, *, target: str = None):
     if member.id in bot.starlock_unlocks:
         unlocks = bot.starlock_unlocks[member.id]
         unlock_names = []
+        starlocks = {**DEFAULT_STARLOCKS, **bot.custom_starlocks}
         for unlock in unlocks[-3:]:
-            for chain, lock_data in STARLOCKS.items():
+            for chain, lock_data in starlocks.items():
                 if chain in unlock:
                     unlock_names.append(lock_data["name"])
                     break
