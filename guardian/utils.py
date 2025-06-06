@@ -57,15 +57,29 @@ def find_contiguous_emoji_chains(text):
     return chains
 
 async def safe_add_roles(member, *roles):
-    """Add roles handling rate limits and missing permissions"""
+    """Add roles while checking hierarchy and handling rate limits"""
+    assignable = []
+    for role in roles:
+        if member.guild.me.top_role <= role:
+            logger.warning(
+                f"Cannot assign role {role.name} to {member}: role higher than bot's top role"
+            )
+        else:
+            assignable.append(role)
+
+    if not assignable:
+        return
+
     try:
-        await member.add_roles(*roles)
+        await member.add_roles(*assignable)
     except discord.Forbidden:
-        logger.debug(f"Missing permissions to add roles for {member}")
+        logger.debug(
+            f"Missing permissions to add roles {', '.join(r.name for r in assignable)} to {member}"
+        )
     except discord.HTTPException as e:
-        if getattr(e, 'status', None) == 429:
-            await asyncio.sleep(getattr(e, 'retry_after', 5))
-            await safe_add_roles(member, *roles)
+        if getattr(e, "status", None) == 429:
+            await asyncio.sleep(getattr(e, "retry_after", 5))
+            await safe_add_roles(member, *assignable)
         else:
             raise
 
