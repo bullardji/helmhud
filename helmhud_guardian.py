@@ -415,6 +415,17 @@ async def safe_edit_message(message, **kwargs):
             else:
                 raise
 
+async def safe_send(destination, *args, **kwargs):
+    """Send a message handling rate limits"""
+    while True:
+        try:
+            return await destination.send(*args, **kwargs)
+        except discord.HTTPException as e:
+            if getattr(e, 'status', None) == 429:
+                await asyncio.sleep(getattr(e, 'retry_after', 5))
+            else:
+                raise
+
 def detect_starcode_chain(emojis):
     """Detect if emojis form a meaningful StarCode chain"""
     return len(emojis) >= 2
@@ -1072,7 +1083,7 @@ async def auto_register_chains():
                     )
                     embed.add_field(name='Author', value=f'<@{chain_data["author"]}>')
                     embed.set_footer(text='Chain persisted for 1 minute without correction')
-                    await channel.send(embed=embed)
+                    await safe_send(channel, embed=embed)
             except Exception:
                 pass
         del bot.pending_chains[key]
@@ -1358,7 +1369,7 @@ async def list_starlocks(ctx):
     vault_id = bot.get_channel_for_feature(ctx.guild.id, 'remory_archive')
     vault_channel = bot.get_channel(int(vault_id)) if vault_id else None
     if vault_channel:
-        await vault_channel.send(embed=embed)
+        await safe_send(vault_channel, embed=embed)
 
 # ============ PROFILE COMMAND WITH FIXES ============
 @bot.command(name='profile')
@@ -1535,7 +1546,7 @@ async def profile(ctx, *, target: str = None):
     vault_id = bot.get_channel_for_feature(ctx.guild.id, 'remory_archive')
     vault_channel = bot.get_channel(int(vault_id)) if vault_id else None
     if vault_channel:
-        await vault_channel.send(embed=embed)
+        await safe_send(vault_channel, embed=embed)
 
 # ============ DIAGNOSTIC COMMAND ============
 @bot.command(name='diagnose')
@@ -3292,7 +3303,7 @@ async def starcode(ctx, *, pattern: str):
     vault_id = bot.get_channel_for_feature(ctx.guild.id, 'remory_archive')
     vault_channel = bot.get_channel(int(vault_id)) if vault_id else None
     if vault_channel:
-        await vault_channel.send(embed=embed)
+        await safe_send(vault_channel, embed=embed)
 
 @bot.command(name='pending')
 async def view_pending(ctx):
