@@ -2162,9 +2162,8 @@ async def skip_training(ctx, target: str = None):
 async def starcode(ctx, *, pattern: str):
     """Enhanced StarCode registration with pattern tracking"""
     valid_emojis = extract_emojis(pattern)
-    
-    if len(valid_emojis) < 2:
-        await ctx.send("❌ StarCode must contain at least 2 emojis")
+    if len(valid_emojis) < 2 or pattern.strip() != "".join(valid_emojis):
+        await ctx.send("❌ StarCode must be consecutive emojis with no other characters")
         return
     
     # Store pattern with enhanced data
@@ -4483,18 +4482,15 @@ async def test_suite(ctx):
             "status": status,
             "details": details
         }
-        
-        # Update embed
-        test_report.clear_fields()
+
+        # Update embed without exceeding field limits
+        lines = []
         for name, result in test_data["test_results"].items():
-            icon = "✅" if result["status"] == "PASS" else "❌"
+            icon = "✅" if result["status"] == "PASS" else ("❌" if result["status"] == "FAIL" else "🔄")
             value = result["details"] if result["details"] else "Test completed"
-            test_report.add_field(
-                name=f"{icon} {name}",
-                value=value[:100],  # Truncate long details
-                inline=False
-            )
-        
+            lines.append(f"{icon} **{name}:** {value[:100]}")
+
+        test_report.description = "Running comprehensive tests...\n" + "\n".join(lines)
         await safe_edit_message(test_msg, embed=test_report)
     
     try:
