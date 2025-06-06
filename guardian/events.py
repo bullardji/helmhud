@@ -3,6 +3,7 @@ from discord.ext import tasks
 from .bot import bot
 from .utils import *
 from .config import *
+from .commands import cleanup_shield_listeners, cleanup_report_cooldowns
 import asyncio
 # ============ EVENT HANDLERS ============
 @bot.event
