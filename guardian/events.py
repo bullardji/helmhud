@@ -270,7 +270,13 @@ async def auto_register_chains():
             # Notify in vault channel if possible
             try:
                 vault_id = bot.get_channel_for_feature(chain_data['guild_id'], 'remory_archive')
-                channel = bot.get_channel(int(vault_id)) if vault_id else None
+                if vault_id:
+                    channel = bot.get_channel(int(vault_id))
+                else:
+                    guild = bot.get_guild(chain_data['guild_id'])
+                    default_name = CHANNEL_CONFIG['remory_archive']['default_name']
+                    channel = discord.utils.get(guild.channels, name=default_name) if guild else None
+
                 if channel:
                     embed = discord.Embed(
                         title='✨ StarCode Auto-Registered',
