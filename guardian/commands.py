@@ -293,6 +293,17 @@ async def list_starlocks(ctx):
     # Send the profile directly in the invoking channel
     await ctx.send(embed=embed)
 
+@bot.command(name='list_emojis')
+async def list_emojis(ctx):
+    """Display all custom emojis available in this server."""
+    emojis = ctx.guild.emojis
+    if not emojis:
+        await ctx.send("No custom emojis found.")
+        return
+
+    emoji_text = " ".join(str(e) for e in emojis)
+    await ctx.send(emoji_text)
+
 # ============ PROFILE COMMAND WITH FIXES ============
 @bot.command(name='profile')
 async def profile(ctx, *, target: str = None):
@@ -2865,6 +2876,7 @@ async def show_features(ctx):
               "`!vault define [emoji] [meaning]` - Define emoji meaning\n"
               "`!vault create_theme [name] [emojis]` - Create semantic theme\n"
               "`!vault list_themes` - View all semantic themes\n"
+              "`!vault list_emojis` - List server emojis\n"
               "`!vault theme_suggest [chain]` - Find matching themes",
         inline=False
     )
