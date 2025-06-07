@@ -18,11 +18,15 @@ import bleach
 from PIL import Image
 import magic
 import time
+from pathlib import Path
 
 # Load environment variables
 load_dotenv()
 # Set up module logger
 logger = logging.getLogger(__name__)
+# Base directory for persistent data files (override with HELMHUD_DATA_DIR env var)
+DATA_DIR = Path(os.getenv("HELMHUD_DATA_DIR", Path(__file__).resolve().parent.parent))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 # ============ ENHANCED BOT CLASS ============
 class HelmhudGuardian(commands.Bot):
     def __init__(self, *args, **kwargs):
@@ -62,7 +66,7 @@ class HelmhudGuardian(commands.Bot):
     def load_data(self):
         """Load persistent data with set conversion"""
         try:
-            with open('user_data.json', 'r') as f:
+            with open(DATA_DIR / 'user_data.json', 'r', encoding='utf-8') as f:
                 saved_data = json.load(f)
                 
             # Convert back to proper types
@@ -79,49 +83,49 @@ class HelmhudGuardian(commands.Bot):
             logger.error(f"Error loading user data: {e}")
             
         try:
-            with open('guild_config.json', 'r') as f:
+            with open(DATA_DIR / 'guild_config.json', 'r', encoding='utf-8') as f:
                 self.guild_channels = json.load(f)
         except FileNotFoundError:
             self.guild_channels = {}
             
         try:
-            with open('emoji_definitions.json', 'r') as f:
+            with open(DATA_DIR / 'emoji_definitions.json', 'r', encoding='utf-8') as f:
                 self.emoji_definitions = json.load(f)
         except FileNotFoundError:
             self.emoji_definitions = {}
             
         try:
-            with open('blessed_chains.json', 'r') as f:
+            with open(DATA_DIR / 'blessed_chains.json', 'r', encoding='utf-8') as f:
                 self.blessed_chains = json.load(f)
         except FileNotFoundError:
             self.blessed_chains = {}
             
         try:
-            with open('custom_trainings.json', 'r') as f:
+            with open(DATA_DIR / 'custom_trainings.json', 'r', encoding='utf-8') as f:
                 self.custom_trainings = json.load(f)
         except FileNotFoundError:
             self.custom_trainings = {}
             
         try:
-            with open('semantic_themes.json', 'r') as f:
+            with open(DATA_DIR / 'semantic_themes.json', 'r', encoding='utf-8') as f:
                 self.semantic_themes = json.load(f)
         except FileNotFoundError:
             self.semantic_themes = {}
             
         try:
-            with open('custom_starlocks.json', 'r') as f:
+            with open(DATA_DIR / 'custom_starlocks.json', 'r', encoding='utf-8') as f:
                 self.custom_starlocks = json.load(f)
         except FileNotFoundError:
             self.custom_starlocks = {}
             
         try:
-            with open('starcode_patterns.json', 'r') as f:
+            with open(DATA_DIR / 'starcode_patterns.json', 'r', encoding='utf-8') as f:
                 self.starcode_patterns = json.load(f)
         except FileNotFoundError:
             self.starcode_patterns = {}
 
         try:
-            with open('backfill_progress.json', 'r') as f:
+            with open(DATA_DIR / 'backfill_progress.json', 'r', encoding='utf-8') as f:
                 self.backfill_progress = json.load(f)
         except FileNotFoundError:
             self.backfill_progress = {}
@@ -138,32 +142,32 @@ class HelmhudGuardian(commands.Bot):
             user_data_to_save[str(user_id)] = user_data_copy
         
         # Save user data
-        with open('user_data.json', 'w') as f:
+        with open(DATA_DIR / 'user_data.json', 'w', encoding='utf-8') as f:
             json.dump(user_data_to_save, f, indent=2, default=str)
         
         # Save other data
-        with open('guild_config.json', 'w') as f:
+        with open(DATA_DIR / 'guild_config.json', 'w', encoding='utf-8') as f:
             json.dump(self.guild_channels, f, indent=2)
             
-        with open('emoji_definitions.json', 'w') as f:
+        with open(DATA_DIR / 'emoji_definitions.json', 'w', encoding='utf-8') as f:
             json.dump(self.emoji_definitions, f, indent=2)
             
-        with open('blessed_chains.json', 'w') as f:
+        with open(DATA_DIR / 'blessed_chains.json', 'w', encoding='utf-8') as f:
             json.dump(self.blessed_chains, f, indent=2)
             
-        with open('custom_trainings.json', 'w') as f:
+        with open(DATA_DIR / 'custom_trainings.json', 'w', encoding='utf-8') as f:
             json.dump(self.custom_trainings, f, indent=2)
             
-        with open('semantic_themes.json', 'w') as f:
+        with open(DATA_DIR / 'semantic_themes.json', 'w', encoding='utf-8') as f:
             json.dump(self.semantic_themes, f, indent=2)
             
-        with open('custom_starlocks.json', 'w') as f:
+        with open(DATA_DIR / 'custom_starlocks.json', 'w', encoding='utf-8') as f:
             json.dump(self.custom_starlocks, f, indent=2)
         
-        with open('starcode_patterns.json', 'w') as f:
+        with open(DATA_DIR / 'starcode_patterns.json', 'w', encoding='utf-8') as f:
             json.dump(self.starcode_patterns, f, indent=2)
 
-        with open('backfill_progress.json', 'w') as f:
+        with open(DATA_DIR / 'backfill_progress.json', 'w', encoding='utf-8') as f:
             json.dump(self.backfill_progress, f, indent=2)
     
     def get_channel_for_feature(self, guild_id, feature):
