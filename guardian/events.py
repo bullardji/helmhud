@@ -91,9 +91,8 @@ async def on_reaction_add(reaction, user):
     bot.user_data[user.id]["emojis_used"].add(emoji)
     bot.user_data[user.id]["reaction_count"] += 1
     
-    # Check for StarCode chains in message reactions
-    # Ignore the bot's own tracking reaction when evaluating the chain
-    message_reactions = [str(r.emoji) for r in reaction.message.reactions if str(r.emoji) != "✨"]
+    # Check for StarCode chains in message reactions, preserving duplicates
+    message_reactions = get_reaction_emojis(reaction.message)
 
     if detect_starcode_chain(message_reactions):
         # Calculate influence with reuse bonus
@@ -343,8 +342,8 @@ async def auto_register_reaction_chains():
             del bot.pending_reaction_chains[msg_id]
             continue
             
-        # Exclude the bot's sparkle indicator from the chain check
-        message_reactions = [str(r.emoji) for r in message.reactions if str(r.emoji) != "✨"]
+        # Get reaction emojis including duplicates and ignoring the sparkle indicator
+        message_reactions = get_reaction_emojis(message)
 
         if detect_starcode_chain(message_reactions):
             chain_key = "".join(message_reactions)
