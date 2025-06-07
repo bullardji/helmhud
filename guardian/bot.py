@@ -58,6 +58,7 @@ class HelmhudGuardian(commands.Bot):
         self.training_assignments = defaultdict(list)
         self.shield_listeners = {}
         self.pending_chains = {}  # Tracks chains waiting to auto-register
+        self.pending_reaction_chains = {}  # Tracks messages waiting for reaction chain check
         self.influence_history = defaultdict(list)  # Track influence changes for reversal
         self.semantic_themes = {}  # Custom themes created by GhostWalkers
         self.custom_starlocks = {}  # Custom starlocks created by GhostWalkers and admins
