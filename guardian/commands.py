@@ -2259,6 +2259,7 @@ async def starcode(ctx, *, pattern: str):
     
     # Persist starcode data then reply in the invoking channel
     bot.save_data()
+    # Reply directly in the invoking channel per bot policy
     await ctx.send(embed=embed)
 
 @bot.command(name='pending')
