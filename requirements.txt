@@ -3,3 +3,4 @@ python-dotenv
 bleach
 Pillow
 python-magic
+emoji
