@@ -250,6 +250,9 @@ async def auto_register_chains():
                 "message_id": chain_data["message_id"],
                 "auto_registered": True
             }
+
+            # Persist the new registration immediately
+            bot.save_data()
             
             # Track original author's chain
             bot.user_data[chain_data["author"]]["chains_originated"][chain_key] = 1

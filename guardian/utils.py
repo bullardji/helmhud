@@ -16,31 +16,39 @@ from .config import ROLES_CONFIG, DEFAULT_STARLOCKS, DEFAULT_TRAINING_QUESTS
 
 logger = logging.getLogger(__name__)
 def extract_emojis(text):
-    """Extract all emojis from text using regex"""
+    """Extract all Unicode and custom Discord emojis from ``text``."""
     emoji_pattern = re.compile(
-        "[\U0001F600-\U0001F64F]|"  # emoticons
-        "[\U0001F300-\U0001F5FF]|"  # symbols & pictographs
-        "[\U0001F680-\U0001F6FF]|"  # transport & map symbols
-        "[\U0001F1E0-\U0001F1FF]|"  # flags (iOS)
-        "[\U00002702-\U000027B0]|"
-        "[\U000024C2-\U0001F251]|"
-        "[\U0001f926-\U0001f937]|"
-        "[\U00010000-\U0010ffff]|"
-        "[\u200d]|"
-        "[\u2640-\u2642]|"
-        "[\u2600-\u2B55]|"
-        "[\u23cf]|"
-        "[\u23e9]|"
-        "[\u231a]|"
-        "[\ufe0f]|"
-        "[\u3030]", 
-        flags=re.UNICODE
+        r"<a?:\w+?:\d+>|"  # custom Discord emojis
+        r"[\U0001F600-\U0001F64F]|"  # emoticons
+        r"[\U0001F300-\U0001F5FF]|"  # symbols & pictographs
+        r"[\U0001F680-\U0001F6FF]|"  # transport & map symbols
+        r"[\U0001F1E0-\U0001F1FF]|"  # flags (iOS)
+        r"[\U00002702-\U000027B0]|"
+        r"[\U000024C2-\U0001F251]|"
+        r"[\U0001f926-\U0001f937]|"
+        r"[\U00010000-\U0010ffff]|"
+        r"[\u200d]|"
+        r"[\u2640-\u2642]|"
+        r"[\u2600-\u2B55]|"
+        r"[\u23cf]|"
+        r"[\u23e9]|"
+        r"[\u231a]|"
+        r"[\ufe0f]|"
+        r"[\u3030]",
+        flags=re.UNICODE,
     )
     return emoji_pattern.findall(text)
 
 def find_contiguous_emoji_chains(text):
-    """Return lists of emojis that appear consecutively"""
-    emoji_pattern = re.compile("[\U0001F600-\U0001F64F]|[\U0001F300-\U0001F5FF]|[\U0001F680-\U0001F6FF]|[\U0001F1E0-\U0001F1FF]|[\U00002702-\U000027B0]|[\U000024C2-\U0001F251]|[\U0001f926-\U0001f937]|[\U00010000-\U0010ffff]|[\u200d]|[\u2640-\u2642]|[\u2600-\u2B55]|[\u23cf]|[\u23e9]|[\u231a]|[\ufe0f]|[\u3030]", flags=re.UNICODE)
+    """Return lists of emojis that appear consecutively, including custom ones."""
+    emoji_pattern = re.compile(
+        r"<a?:\w+?:\d+>|"
+        r"[\U0001F600-\U0001F64F]|[\U0001F300-\U0001F5FF]|[\U0001F680-\U0001F6FF]|"
+        r"[\U0001F1E0-\U0001F1FF]|[\U00002702-\U000027B0]|[\U000024C2-\U0001F251]|"
+        r"[\U0001f926-\U0001f937]|[\U00010000-\U0010ffff]|[\u200d]|[\u2640-\u2642]|"
+        r"[\u2600-\u2B55]|[\u23cf]|[\u23e9]|[\u231a]|[\ufe0f]|[\u3030]",
+        flags=re.UNICODE,
+    )
     chains=[]
     current=[]
     last_end=None
