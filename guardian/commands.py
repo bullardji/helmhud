@@ -290,10 +290,7 @@ async def list_starlocks(ctx):
             inline=False
         )
     
-    vault_id = bot.get_channel_for_feature(ctx.guild.id, 'remory_archive')
-    vault_channel = bot.get_channel(int(vault_id)) if vault_id else None
-    if vault_channel:
-        await safe_send(vault_channel, embed=embed)
+    await ctx.send(embed=embed)
 
 # ============ PROFILE COMMAND WITH FIXES ============
 @bot.command(name='profile')
@@ -468,10 +465,7 @@ async def profile(ctx, *, target: str = None):
     
     embed.set_footer(text=f"Account created: {created_date} | Joined server: {joined_date}")
     
-    vault_id = bot.get_channel_for_feature(ctx.guild.id, 'remory_archive')
-    vault_channel = bot.get_channel(int(vault_id)) if vault_id else None
-    if vault_channel:
-        await safe_send(vault_channel, embed=embed)
+    await ctx.send(embed=embed)
 
 # ============ DIAGNOSTIC COMMAND ============
 @bot.command(name='diagnose')
