@@ -104,8 +104,8 @@ async def on_reaction_add(reaction, user):
         else:
             bot.user_data[user.id]["chains_adopted"][chain_key] = 1
     
-    # Check role progression and announce in the reaction's channel
-    await check_role_progression(user, reaction.message.guild, reaction.message.channel)
+    # Check role progression and announce in the configured progression channel
+    await check_role_progression(user, reaction.message.guild)
 
 @bot.event
 async def on_message(message):
