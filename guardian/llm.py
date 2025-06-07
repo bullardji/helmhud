@@ -18,6 +18,12 @@ _index = None
 _memories: List[str] = []
 
 
+def invalidate_index() -> None:
+    """Mark the in-memory FAISS index as stale."""
+    global _index
+    _index = None
+
+
 def _load_models():
     global _tokenizer, _model, _emb_model
     if _tokenizer is None:

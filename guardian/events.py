@@ -163,6 +163,8 @@ async def on_message(message):
             "message_id": message.id
         }
         bot.user_data[message.author.id]["remory_strings"].append(remory)
+        from .llm import invalidate_index
+        invalidate_index()
 
         unlock_message = await check_starlock(emojis, message.author, message.guild)
         if unlock_message:
