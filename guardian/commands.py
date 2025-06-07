@@ -2257,14 +2257,8 @@ async def starcode(ctx, *, pattern: str):
             inline=False
         )
     
-    # Send StarCode registrations to the configured archive/forge channel
-    channel_id = bot.get_channel_for_feature(ctx.guild.id, "remory_archive")
-    if channel_id:
-        channel = ctx.guild.get_channel(int(channel_id))
-    else:
-        channel = ctx.channel
-
-    await safe_send(channel, embed=embed)
+    # Reply directly in the invoking channel per bot policy
+    await ctx.send(embed=embed)
 
 @bot.command(name='pending')
 async def view_pending(ctx):
