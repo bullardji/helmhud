@@ -293,6 +293,17 @@ async def list_starlocks(ctx):
     # Send the profile directly in the invoking channel
     await ctx.send(embed=embed)
 
+@bot.command(name='list_emojis')
+async def list_emojis(ctx):
+    """Display all custom emojis available in this server."""
+    emojis = ctx.guild.emojis
+    if not emojis:
+        await ctx.send("No custom emojis found.")
+        return
+
+    emoji_text = " ".join(str(e) for e in emojis)
+    await ctx.send(emoji_text)
+
 # ============ PROFILE COMMAND WITH FIXES ============
 @bot.command(name='profile')
 async def profile(ctx, *, target: str = None):
@@ -1025,7 +1036,7 @@ async def backfill_server(ctx, limit: int = None):
                         bot.user_data[user.id]["reaction_count"] += 1
                         
                         # Check for influence from reaction chains
-                        message_reactions = [str(r.emoji) for r in message.reactions]
+                        message_reactions = get_reaction_emojis(message)
                         if detect_starcode_chain(message_reactions):
                             influence = calculate_chain_influence(message_reactions, user.id, bot)
                             bot.user_data[user.id]["influence_score"] += influence
@@ -2302,7 +2313,7 @@ async def view_pending(ctx):
                     channel = ctx.guild.get_channel(data["channel_id"])
                     if channel:
                         message = await channel.fetch_message(msg_id)
-                        reactions = [str(r.emoji) for r in message.reactions if str(r.emoji) != "✨"]
+                        reactions = get_reaction_emojis(message)
                         if reactions:
                             chain_display = "".join(reactions)
                 except Exception:
@@ -2865,6 +2876,7 @@ async def show_features(ctx):
               "`!vault define [emoji] [meaning]` - Define emoji meaning\n"
               "`!vault create_theme [name] [emojis]` - Create semantic theme\n"
               "`!vault list_themes` - View all semantic themes\n"
+              "`!vault list_emojis` - List server emojis\n"
               "`!vault theme_suggest [chain]` - Find matching themes",
         inline=False
     )
