@@ -64,6 +64,19 @@ def find_contiguous_emoji_chains(text):
         chains.append(current)
     return chains
 
+def get_reaction_emojis(message):
+    """Return a list of reaction emojis including duplicates.
+
+    The sparkle tracking reaction (✨) is ignored. This helper preserves the
+    count of each reaction so repeated emojis are considered part of the chain.
+    """
+    emojis = []
+    for reaction in message.reactions:
+        if str(reaction.emoji) == "✨":
+            continue
+        emojis.extend([str(reaction.emoji)] * reaction.count)
+    return emojis
+
 async def safe_add_roles(member, *roles):
     """Add roles while checking hierarchy and handling rate limits"""
     assignable = []
