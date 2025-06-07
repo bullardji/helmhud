@@ -119,7 +119,6 @@ async def on_reaction_add(reaction, user):
         # Track the message for potential reaction chain auto-registration.
         # The timestamp is updated on each reaction so the chain must persist
         # for a full minute without changes.
-        # Track message for potential reaction chain auto-registration
 
         bot.pending_reaction_chains[reaction.message.id] = {
             "channel_id": reaction.message.channel.id,
