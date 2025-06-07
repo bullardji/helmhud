@@ -2295,16 +2295,18 @@ async def view_pending(ctx):
             elapsed = (current_time - data["timestamp"]).seconds
             remaining = max(0, 60 - elapsed)
 
-            chain_display = f"Message ID {msg_id}"
-            try:
-                channel = ctx.guild.get_channel(data["channel_id"])
-                if channel:
-                    message = await channel.fetch_message(msg_id)
-                    reactions = [str(r.emoji) for r in message.reactions]
-                    if reactions:
-                        chain_display = "".join(reactions)
-            except Exception:
-                pass
+
+            chain_display = "".join(data.get("chain", [])) or f"Message ID {msg_id}"
+            if not chain_display:
+                try:
+                    channel = ctx.guild.get_channel(data["channel_id"])
+                    if channel:
+                        message = await channel.fetch_message(msg_id)
+                        reactions = [str(r.emoji) for r in message.reactions if str(r.emoji) != "✨"]
+                        if reactions:
+                            chain_display = "".join(reactions)
+                except Exception:
+                    pass
 
             author = ctx.guild.get_member(data["author"])
             embed.add_field(

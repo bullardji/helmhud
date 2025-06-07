@@ -92,7 +92,9 @@ async def on_reaction_add(reaction, user):
     bot.user_data[user.id]["reaction_count"] += 1
     
     # Check for StarCode chains in message reactions
-    message_reactions = [str(r.emoji) for r in reaction.message.reactions]
+    # Ignore the bot's own tracking reaction when evaluating the chain
+    message_reactions = [str(r.emoji) for r in reaction.message.reactions if str(r.emoji) != "✨"]
+
     if detect_starcode_chain(message_reactions):
         # Calculate influence with reuse bonus
         influence = calculate_chain_influence(message_reactions, user.id, bot)
@@ -108,19 +110,27 @@ async def on_reaction_add(reaction, user):
 
 
         # Visual indicator the chain is being tracked
+        # Add a sparkle reaction only once to indicate tracking
         try:
-            await reaction.message.add_reaction("✨")
+            if all(str(r.emoji) != "✨" for r in reaction.message.reactions):
+                await reaction.message.add_reaction("✨")
         except Exception:
             pass
 
+        # Track the message for potential reaction chain auto-registration.
+        # The timestamp is updated on each reaction so the chain must persist
+        # for a full minute without changes.
         # Track message for potential reaction chain auto-registration
+
         bot.pending_reaction_chains[reaction.message.id] = {
             "channel_id": reaction.message.channel.id,
             "guild_id": reaction.message.guild.id,
             "author": reaction.message.author.id,
+
+            "chain": message_reactions,
             "timestamp": datetime.now(),
         }
-
+    
     # Check role progression and announce in the configured progression channel
     await check_role_progression(user, reaction.message.guild)
 
@@ -332,8 +342,10 @@ async def auto_register_reaction_chains():
         except Exception:
             del bot.pending_reaction_chains[msg_id]
             continue
+            
+        # Exclude the bot's sparkle indicator from the chain check
+        message_reactions = [str(r.emoji) for r in message.reactions if str(r.emoji) != "✨"]
 
-        message_reactions = [str(r.emoji) for r in message.reactions]
         if detect_starcode_chain(message_reactions):
             chain_key = "".join(message_reactions)
 
