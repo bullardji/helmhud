@@ -1025,7 +1025,7 @@ async def backfill_server(ctx, limit: int = None):
                         bot.user_data[user.id]["reaction_count"] += 1
                         
                         # Check for influence from reaction chains
-                        message_reactions = [str(r.emoji) for r in message.reactions]
+                        message_reactions = get_reaction_emojis(message)
                         if detect_starcode_chain(message_reactions):
                             influence = calculate_chain_influence(message_reactions, user.id, bot)
                             bot.user_data[user.id]["influence_score"] += influence
@@ -2302,7 +2302,7 @@ async def view_pending(ctx):
                     channel = ctx.guild.get_channel(data["channel_id"])
                     if channel:
                         message = await channel.fetch_message(msg_id)
-                        reactions = [str(r.emoji) for r in message.reactions if str(r.emoji) != "✨"]
+                        reactions = get_reaction_emojis(message)
                         if reactions:
                             chain_display = "".join(reactions)
                 except Exception:
