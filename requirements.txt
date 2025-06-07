@@ -4,3 +4,7 @@ bleach
 Pillow
 python-magic
 emoji
+transformers
+accelerate
+sentence-transformers
+faiss-cpu
