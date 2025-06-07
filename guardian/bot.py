@@ -119,6 +119,12 @@ class HelmhudGuardian(commands.Bot):
                 self.starcode_patterns = json.load(f)
         except FileNotFoundError:
             self.starcode_patterns = {}
+
+        try:
+            with open('backfill_progress.json', 'r') as f:
+                self.backfill_progress = json.load(f)
+        except FileNotFoundError:
+            self.backfill_progress = {}
     
     def save_data(self):
         """Save persistent data with set conversion"""
@@ -156,6 +162,9 @@ class HelmhudGuardian(commands.Bot):
         
         with open('starcode_patterns.json', 'w') as f:
             json.dump(self.starcode_patterns, f, indent=2)
+
+        with open('backfill_progress.json', 'w') as f:
+            json.dump(self.backfill_progress, f, indent=2)
     
     def get_channel_for_feature(self, guild_id, feature):
         """Get the configured channel for a specific feature"""

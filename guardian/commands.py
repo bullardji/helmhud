@@ -841,8 +841,13 @@ async def backfill_server(ctx, limit: int = None):
     text_channels = [ch for ch in ctx.guild.channels if isinstance(ch, discord.TextChannel)]
     await update_log(f"📚 Found {len(text_channels)} text channels to process")
     
-    # Process each channel concurrently
-    semaphore = asyncio.Semaphore(3)
+    # Process each channel with a small worker pool
+    max_workers = 3
+    queue = asyncio.Queue()
+    for i, ch in enumerate(text_channels):
+        await queue.put((i, ch))
+
+    semaphore = asyncio.Semaphore(max_workers)
 
     async def process_channel(idx, channel):
         nonlocal processed_messages, processed_reactions, existing_chains, existing_remories
@@ -860,9 +865,15 @@ async def backfill_server(ctx, limit: int = None):
 
         await update_log(f"📂 Processing #{channel.name} ({idx+1}/{len(text_channels)})")
 
+        start_before = bot.backfill_progress.get(str(ctx.guild.id), {}).get(str(channel.id))
+
+        async def checkpoint(mid):
+            guild_map = bot.backfill_progress.setdefault(str(ctx.guild.id), {})
+            guild_map[str(channel.id)] = mid
+
         try:
             # Process messages in channel using batched fetches
-            async for message in fetch_history_batched(channel, limit):
+            async for message in fetch_history_batched(channel, limit, start_before=start_before, progress_callback=checkpoint):
                 if message.author.bot:
                     continue
                 
@@ -874,6 +885,8 @@ async def backfill_server(ctx, limit: int = None):
                     
                 processed_messages.add(message.id)
                 stats["messages_processed"] += 1
+                if stats["messages_processed"] % 500 == 0:
+                    bot.save_data()
                 channel_messages += 1
                 
                 # Ensure user has profile
@@ -1036,10 +1049,9 @@ async def backfill_server(ctx, limit: int = None):
             print(f"Full error: {e}")
             return
 
-        # Save data every 25 channels
-        if idx % 25 == 0 and idx > 0:
-            await update_log("💾 Saving checkpoint...")
-            bot.save_data()
+        # Save progress after each channel
+        await update_log("💾 Saving checkpoint...")
+        bot.save_data()
 
         # Channel complete log
         channel_duration = (datetime.now() - channel_start).seconds
@@ -1047,13 +1059,22 @@ async def backfill_server(ctx, limit: int = None):
             f"✅ Completed #{channel.name}: {channel_messages} msgs ({channel_skipped} skipped), {channel_chains} new chains in {channel_duration}s"
         )
 
-    async def worker(idx, channel):
-        async with semaphore:
-            await process_channel(idx, channel)
+    async def worker():
+        while True:
+            item = await queue.get()
+            if item is None:
+                queue.task_done()
+                break
+            idx, ch = item
+            async with semaphore:
+                await process_channel(idx, ch)
+            queue.task_done()
 
-    tasks = [asyncio.create_task(worker(i, ch)) for i, ch in enumerate(text_channels)]
-    for t in asyncio.as_completed(tasks):
-        await t
+    workers = [asyncio.create_task(worker()) for _ in range(max_workers)]
+    await queue.join()
+    for _ in workers:
+        await queue.put(None)
+    await asyncio.gather(*workers)
     
     # Post-processing: Assign roles based on accumulated stats
     await update_log("🎭 Starting role assignment phase...")

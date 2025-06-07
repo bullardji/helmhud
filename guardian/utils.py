@@ -153,10 +153,26 @@ async def get_member_by_reference(ctx, reference: str):
             return member
     
     return None
-async def fetch_history_batched(channel, limit=None, batch_size=100, base_delay=0.0):
-    """Yield channel history in batches with adaptive delays for rate limits."""
+async def fetch_history_batched(channel, limit=None, batch_size=100, base_delay=0.2, start_before=None, progress_callback=None):
+    """Yield channel history in batches with adaptive delays for rate limits.
+
+    Parameters
+    ----------
+    channel: discord.TextChannel
+        Channel to fetch history from.
+    limit: Optional[int]
+        Maximum number of messages to retrieve.
+    batch_size: int
+        Number of messages per request.
+    base_delay: float
+        Base delay between batches to smooth requests.
+    start_before: Optional[int]
+        Message ID to start before when resuming a backfill.
+    progress_callback: Optional[Callable[[int], Awaitable]]
+        Called with the oldest fetched message ID after each batch.
+    """
     fetched = 0
-    before = None
+    before = start_before
     delay = base_delay
     while limit is None or fetched < limit:
         pull = batch_size if limit is None else min(batch_size, limit - fetched)
@@ -164,27 +180,25 @@ async def fetch_history_batched(channel, limit=None, batch_size=100, base_delay=
             try:
                 before_obj = discord.Object(id=before) if before else None
                 batch = [m async for m in channel.history(limit=pull, before=before_obj)]
-                # slowly reduce delay when successful
-                delay = max(0.0, delay * 0.9)
                 break
             except discord.HTTPException as e:
                 if getattr(e, 'status', None) == 429:
                     wait = getattr(e, 'retry_after', 5)
-                    delay = min(delay + wait / max(pull, 1), 2.0)
                     await asyncio.sleep(wait)
+                    continue
                 else:
                     raise
         if not batch:
             break
         for message in batch:
             yield message
-            if delay:
-                await asyncio.sleep(delay)
         fetched += len(batch)
         before = batch[-1].id
-        await asyncio.sleep(0)
+        if progress_callback:
+            await progress_callback(before)
+        await asyncio.sleep(delay)
 
-async def fetch_reaction_users_with_retry(reaction, batch_size=100, base_delay=0.0):
+async def fetch_reaction_users_with_retry(reaction, batch_size=100, base_delay=0.2):
     """Yield users from a reaction while respecting rate limits."""
     after = None
     delay = base_delay
@@ -192,11 +206,9 @@ async def fetch_reaction_users_with_retry(reaction, batch_size=100, base_delay=0
         try:
             after_obj = discord.Object(id=after.id) if after else None
             users = [u async for u in reaction.users(limit=batch_size, after=after_obj)]
-            delay = max(0.0, delay * 0.9)
         except discord.HTTPException as e:
             if getattr(e, 'status', None) == 429:
                 wait = getattr(e, 'retry_after', 5)
-                delay = min(delay + wait / max(batch_size, 1), 2.0)
                 await asyncio.sleep(wait)
                 continue
             else:
@@ -205,10 +217,8 @@ async def fetch_reaction_users_with_retry(reaction, batch_size=100, base_delay=0
             break
         for user in users:
             yield user
-            if delay:
-                await asyncio.sleep(delay)
         after = users[-1]
-        await asyncio.sleep(0)
+        await asyncio.sleep(delay)
 
 async def check_starlock(chain, member, guild):
     """Check if a chain unlocks a StarLock"""
