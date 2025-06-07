@@ -290,7 +290,8 @@ async def list_starlocks(ctx):
             inline=False
         )
     
-    await safe_send(ctx.channel, embed=embed)
+    # Send the profile directly in the invoking channel
+    await ctx.send(embed=embed)
 
 # ============ PROFILE COMMAND WITH FIXES ============
 @bot.command(name='profile')
@@ -465,7 +466,8 @@ async def profile(ctx, *, target: str = None):
     
     embed.set_footer(text=f"Account created: {created_date} | Joined server: {joined_date}")
     
-    await safe_send(ctx.channel, embed=embed)
+    # Ensure the profile reply is sent where the command was used
+    await ctx.send(embed=embed)
 
 # ============ DIAGNOSTIC COMMAND ============
 @bot.command(name='diagnose')
@@ -2255,7 +2257,14 @@ async def starcode(ctx, *, pattern: str):
             inline=False
         )
     
-    await safe_send(ctx.channel, embed=embed)
+    # Send StarCode registrations to the configured archive/forge channel
+    channel_id = bot.get_channel_for_feature(ctx.guild.id, "remory_archive")
+    if channel_id:
+        channel = ctx.guild.get_channel(int(channel_id))
+    else:
+        channel = ctx.channel
+
+    await safe_send(channel, embed=embed)
 
 @bot.command(name='pending')
 async def view_pending(ctx):
