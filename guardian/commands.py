@@ -1962,7 +1962,7 @@ async def theme_suggest(ctx, *, chain: str):
         
         embed = discord.Embed(
             title="🎯 Theme Analysis",
-            description=f"Themes for: **{"".join(emojis)}**",
+            description=f"Themes for: **{''.join(emojis)}**",
             color=0x87CEEB
         )
         
