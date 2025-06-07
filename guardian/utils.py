@@ -300,8 +300,19 @@ async def check_starlock(chain, member, guild):
     
     return None
 
-async def check_role_progression(member, guild):
-    """Enhanced role progression with Knight/Ghost permissions"""
+async def check_role_progression(member, guild, channel=None):
+    """Enhanced role progression with Knight/Ghost permissions
+
+    Parameters
+    ----------
+    member : discord.Member
+        The member earning a new role.
+    guild : discord.Guild
+        Guild context for role creation/lookups.
+    channel : Optional[discord.TextChannel]
+        Channel to post the progression announcement. If ``None`` the
+        configured ``vault_progression`` channel for the guild is used.
+    """
     user_stats = bot.user_data[member.id]
     current_roles = [role.name for role in member.roles]
     
@@ -343,13 +354,14 @@ async def check_role_progression(member, guild):
             
             await safe_add_roles(member, role)
             
-            # Announce progression
-            channel_id = bot.get_channel_for_feature(guild.id, "vault_progression")
-            if channel_id:
-                channel = guild.get_channel(int(channel_id))
-            else:
-                channel = discord.utils.get(guild.channels, name="vault-progression")
-            
+            # Announce progression in the invoking channel when provided
+            if channel is None:
+                channel_id = bot.get_channel_for_feature(guild.id, "vault_progression")
+                if channel_id:
+                    channel = guild.get_channel(int(channel_id))
+                else:
+                    channel = discord.utils.get(guild.channels, name="vault-progression")
+
             if channel:
                 embed = discord.Embed(
                     title="✨ Role Ascension ✨",

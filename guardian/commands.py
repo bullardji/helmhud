@@ -2255,10 +2255,7 @@ async def starcode(ctx, *, pattern: str):
             inline=False
         )
     
-    vault_id = bot.get_channel_for_feature(ctx.guild.id, 'remory_archive')
-    vault_channel = bot.get_channel(int(vault_id)) if vault_id else None
-    if vault_channel:
-        await safe_send(vault_channel, embed=embed)
+    await safe_send(ctx.channel, embed=embed)
 
 @bot.command(name='pending')
 async def view_pending(ctx):
@@ -4184,7 +4181,7 @@ async def sync_user_roles_across_servers(
     return sync_results
 
 # ============ MODIFIED ROLE PROGRESSION ============
-async def check_role_progression(member, guild):
+async def check_role_progression(member, guild, channel=None):
     """Enhanced role progression with cross-server sync"""
     user_stats = bot.user_data[member.id]
     current_roles = [role.name for role in member.roles]
@@ -4230,13 +4227,14 @@ async def check_role_progression(member, guild):
             await safe_add_roles(member, role)
             new_roles_earned.append((role_key, config))
             
-            # Announce progression
-            channel_id = bot.get_channel_for_feature(guild.id, "vault_progression")
-            if channel_id:
-                channel = guild.get_channel(int(channel_id))
-            else:
-                channel = discord.utils.get(guild.channels, name="vault-progression")
-            
+            # Announce progression in invoking channel if provided
+            if channel is None:
+                channel_id = bot.get_channel_for_feature(guild.id, "vault_progression")
+                if channel_id:
+                    channel = guild.get_channel(int(channel_id))
+                else:
+                    channel = discord.utils.get(guild.channels, name="vault-progression")
+
             if channel:
                 embed = discord.Embed(
                     title="✨ Role Ascension ✨",
