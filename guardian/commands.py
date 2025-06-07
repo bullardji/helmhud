@@ -290,7 +290,7 @@ async def list_starlocks(ctx):
             inline=False
         )
     
-    await ctx.send(embed=embed)
+    await safe_send(ctx.channel, embed=embed)
 
 # ============ PROFILE COMMAND WITH FIXES ============
 @bot.command(name='profile')
@@ -465,7 +465,7 @@ async def profile(ctx, *, target: str = None):
     
     embed.set_footer(text=f"Account created: {created_date} | Joined server: {joined_date}")
     
-    await ctx.send(embed=embed)
+    await safe_send(ctx.channel, embed=embed)
 
 # ============ DIAGNOSTIC COMMAND ============
 @bot.command(name='diagnose')
