@@ -23,6 +23,8 @@ Helmhud Guardian is a Discord bot. To run it you need Python 3.11+ and to instal
    python helmhud_guardian.py
    ```
 
-When running, mention `@Helmhud Guardian` in any channel to chat with the local LLM. The bot will reply using context from recent messages and influential memories.
+The first run checks whether the Apriel-5B model is cached locally and downloads
+it if necessary. Mention `@Helmhud Guardian` in any channel to chat with the LLM.
+The bot replies using context from recent messages and influential memories.
 
 The bot stores its JSON data files in the directory specified by the `HELMHUD_DATA_DIR` environment variable. If not set, files are saved in the project root.

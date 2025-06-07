@@ -49,6 +49,18 @@ def _load_models():
         ) from e
 
 
+def ensure_model_downloaded() -> None:
+    """Verify model files exist locally and download them if missing."""
+    try:
+        AutoTokenizer.from_pretrained(MODEL_NAME, local_files_only=True)
+        AutoModelForCausalLM.from_pretrained(MODEL_NAME, local_files_only=True)
+        SentenceTransformer(EMB_MODEL_NAME)
+        logger.info("Model files already present; skipping download")
+    except OSError:
+        logger.info("Model files not found locally, downloading...")
+        _load_models()
+
+
 def _build_index():
     global _index, _memories
     remories = []

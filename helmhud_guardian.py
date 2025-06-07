@@ -5,6 +5,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from guardian import bot
+from guardian.llm import ensure_model_downloaded
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,4 +20,5 @@ if __name__ == "__main__":
         raise RuntimeError(
             "DISCORD_TOKEN not set. Create a .env file with DISCORD_TOKEN=your_token"
         )
+    ensure_model_downloaded()
     bot.run(token)
