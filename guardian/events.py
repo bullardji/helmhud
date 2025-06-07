@@ -98,7 +98,7 @@ async def on_reaction_add(reaction, user):
         influence = calculate_chain_influence(message_reactions, user.id, bot)
         bot.user_data[user.id]["influence_score"] += influence
         bot.user_data[user.id]["starcode_chains"].append(message_reactions)
-        
+
         # Track chain adoption
         chain_key = "".join(message_reactions)
         if chain_key in bot.user_data[user.id]["chains_adopted"]:
@@ -106,14 +106,21 @@ async def on_reaction_add(reaction, user):
         else:
             bot.user_data[user.id]["chains_adopted"][chain_key] = 1
 
-    # Track message for potential reaction chain auto-registration
-    bot.pending_reaction_chains[reaction.message.id] = {
-        "channel_id": reaction.message.channel.id,
-        "guild_id": reaction.message.guild.id,
-        "author": reaction.message.author.id,
-        "timestamp": datetime.now(),
-    }
-    
+
+        # Visual indicator the chain is being tracked
+        try:
+            await reaction.message.add_reaction("✨")
+        except Exception:
+            pass
+
+        # Track message for potential reaction chain auto-registration
+        bot.pending_reaction_chains[reaction.message.id] = {
+            "channel_id": reaction.message.channel.id,
+            "guild_id": reaction.message.guild.id,
+            "author": reaction.message.author.id,
+            "timestamp": datetime.now(),
+        }
+
     # Check role progression and announce in the configured progression channel
     await check_role_progression(user, reaction.message.guild)
 
