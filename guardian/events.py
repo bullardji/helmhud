@@ -106,6 +106,7 @@ async def on_reaction_add(reaction, user):
         else:
             bot.user_data[user.id]["chains_adopted"][chain_key] = 1
 
+
         # Visual indicator the chain is being tracked
         try:
             await reaction.message.add_reaction("✨")
@@ -119,7 +120,7 @@ async def on_reaction_add(reaction, user):
             "author": reaction.message.author.id,
             "timestamp": datetime.now(),
         }
-    
+
     # Check role progression and announce in the configured progression channel
     await check_role_progression(user, reaction.message.guild)
 
