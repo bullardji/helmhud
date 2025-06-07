@@ -2265,22 +2265,22 @@ async def starcode(ctx, *, pattern: str):
 @bot.command(name='pending')
 async def view_pending(ctx):
     """View chains pending auto-registration"""
-    if not bot.pending_chains:
+    if not bot.pending_chains and not bot.pending_reaction_chains:
         await ctx.send("📭 No chains pending registration")
         return
-    
+
     embed = discord.Embed(
         title="⏳ Pending StarCodes",
         description="Chains awaiting auto-registration",
         color=0x87CEEB
     )
-    
+
     current_time = datetime.now()
     for key, data in list(bot.pending_chains.items())[:10]:
         chain = "".join(data["chain"])
         elapsed = (current_time - data["timestamp"]).seconds
         remaining = max(0, 60 - elapsed)
-        
+
         author = ctx.guild.get_member(data["author"])
         embed.add_field(
             name=chain,
@@ -2288,10 +2288,36 @@ async def view_pending(ctx):
                   f"Time left: {remaining}s",
             inline=True
         )
-    
-    if len(bot.pending_chains) > 10:
-        embed.set_footer(text=f"Showing 10 of {len(bot.pending_chains)} pending chains")
-    
+
+    if bot.pending_reaction_chains:
+        embed.add_field(name="\u200b", value="\u200b", inline=False)
+        for msg_id, data in list(bot.pending_reaction_chains.items())[:10]:
+            elapsed = (current_time - data["timestamp"]).seconds
+            remaining = max(0, 60 - elapsed)
+
+            chain_display = "".join(data.get("chain", [])) or f"Message ID {msg_id}"
+            if not chain_display:
+                try:
+                    channel = ctx.guild.get_channel(data["channel_id"])
+                    if channel:
+                        message = await channel.fetch_message(msg_id)
+                        reactions = [str(r.emoji) for r in message.reactions if str(r.emoji) != "✨"]
+                        if reactions:
+                            chain_display = "".join(reactions)
+                except Exception:
+                    pass
+
+            author = ctx.guild.get_member(data["author"])
+            embed.add_field(
+                name=chain_display,
+                value=f"By: {author.mention if author else 'Unknown'}\nTime left: {remaining}s",
+                inline=True
+            )
+
+    if len(bot.pending_chains) > 10 or len(bot.pending_reaction_chains) > 10:
+        total = len(bot.pending_chains) + len(bot.pending_reaction_chains)
+        embed.set_footer(text=f"Showing up to 10 of {total} pending chains")
+
     await ctx.send(embed=embed)
 
 @bot.command(name='top_chains')

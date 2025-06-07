@@ -17,6 +17,8 @@ async def on_ready():
         cleanup_shield_listeners.start()
     if not auto_register_chains.is_running():
         auto_register_chains.start()
+    if not auto_register_reaction_chains.is_running():
+        auto_register_reaction_chains.start()
     if not cleanup_report_cooldowns.is_running():
         cleanup_report_cooldowns.start()
 
@@ -90,19 +92,40 @@ async def on_reaction_add(reaction, user):
     bot.user_data[user.id]["reaction_count"] += 1
     
     # Check for StarCode chains in message reactions
-    message_reactions = [str(r.emoji) for r in reaction.message.reactions]
+    # Ignore the bot's own tracking reaction when evaluating the chain
+    message_reactions = [str(r.emoji) for r in reaction.message.reactions if str(r.emoji) != "✨"]
+
     if detect_starcode_chain(message_reactions):
         # Calculate influence with reuse bonus
         influence = calculate_chain_influence(message_reactions, user.id, bot)
         bot.user_data[user.id]["influence_score"] += influence
         bot.user_data[user.id]["starcode_chains"].append(message_reactions)
-        
+
         # Track chain adoption
         chain_key = "".join(message_reactions)
         if chain_key in bot.user_data[user.id]["chains_adopted"]:
             bot.user_data[user.id]["chains_adopted"][chain_key] += 1
         else:
             bot.user_data[user.id]["chains_adopted"][chain_key] = 1
+
+        # Visual indicator the chain is being tracked
+        # Add a sparkle reaction only once to indicate tracking
+        try:
+            if all(str(r.emoji) != "✨" for r in reaction.message.reactions):
+                await reaction.message.add_reaction("✨")
+        except Exception:
+            pass
+
+        # Track the message for potential reaction chain auto-registration.
+        # The timestamp is updated on each reaction so the chain must persist
+        # for a full minute without changes.
+        bot.pending_reaction_chains[reaction.message.id] = {
+            "channel_id": reaction.message.channel.id,
+            "guild_id": reaction.message.guild.id,
+            "author": reaction.message.author.id,
+            "chain": message_reactions,
+            "timestamp": datetime.now(),
+        }
     
     # Check role progression and announce in the configured progression channel
     await check_role_progression(user, reaction.message.guild)
@@ -292,3 +315,80 @@ async def auto_register_chains():
             except Exception:
                 pass
         del bot.pending_chains[key]
+
+# ============ REACTION AUTO-REGISTRATION ============
+@tasks.loop(seconds=30)
+async def auto_register_reaction_chains():
+    """Auto-register reaction chains that persist for 1 minute"""
+    current_time = datetime.now()
+    to_register = []
+
+    for msg_id, data in list(bot.pending_reaction_chains.items()):
+        if (current_time - data["timestamp"]).seconds >= 60:
+            to_register.append((msg_id, data))
+
+    for msg_id, data in to_register:
+        channel = bot.get_channel(data["channel_id"])
+        if not channel:
+            del bot.pending_reaction_chains[msg_id]
+            continue
+
+        try:
+            message = await channel.fetch_message(msg_id)
+        except Exception:
+            del bot.pending_reaction_chains[msg_id]
+            continue
+
+        # Exclude the bot's sparkle indicator from the chain check
+        message_reactions = [str(r.emoji) for r in message.reactions if str(r.emoji) != "✨"]
+        if detect_starcode_chain(message_reactions):
+            chain_key = "".join(message_reactions)
+
+            if chain_key not in bot.starcode_patterns:
+                bot.starcode_patterns[chain_key] = {
+                    "author": data["author"],
+                    "created": datetime.now().isoformat(),
+                    "uses": 1,
+                    "description": "Auto-registered from reactions",
+                    "pattern": chain_key,
+                    "message_id": msg_id,
+                    "auto_registered": True,
+                }
+
+                bot.save_data()
+
+                bot.user_data[data["author"]]["chains_originated"][chain_key] = 1
+
+                influence_gain = 10
+                bot.user_data[data["author"]]["influence_score"] += influence_gain
+
+                bot.influence_history[data["author"]].append({
+                    "amount": influence_gain,
+                    "reason": "auto_register_reaction",
+                    "chain": chain_key,
+                    "timestamp": datetime.now(),
+                    "reversible": True,
+                })
+
+                try:
+                    vault_id = bot.get_channel_for_feature(data["guild_id"], "remory_archive")
+                    if vault_id:
+                        notify_channel = bot.get_channel(int(vault_id))
+                    else:
+                        guild = bot.get_guild(data["guild_id"])
+                        default_name = CHANNEL_CONFIG["remory_archive"]["default_name"]
+                        notify_channel = discord.utils.get(guild.channels, name=default_name) if guild else None
+
+                    if notify_channel:
+                        embed = discord.Embed(
+                            title="✨ StarCode Auto-Registered",
+                            description=f"Pattern **{chain_key}** has been registered",
+                            color=0x90EE90,
+                        )
+                        embed.add_field(name="Author", value=f"<@{data['author']}>")
+                        embed.set_footer(text="Chain persisted for 1 minute without correction")
+                        await safe_send(notify_channel, embed=embed)
+                except Exception:
+                    pass
+
+        del bot.pending_reaction_chains[msg_id]
