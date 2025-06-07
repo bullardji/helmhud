@@ -17,28 +17,57 @@ from .config import ROLES_CONFIG, DEFAULT_STARLOCKS, DEFAULT_TRAINING_QUESTS
 
 logger = logging.getLogger(__name__)
 def extract_emojis(text):
-    """Extract all Unicode and custom Discord emojis from ``text``."""
-    # Combine the emoji package regex with custom emoji pattern
+    """Extract all Unicode and custom Discord emojis from ``text`` preserving order."""
     custom_pattern = r"<a?:\w+?:\d+>"
-    full_pattern = re.compile(f"({custom_pattern}|{emoji.get_emoji_regexp().pattern})")
-    return [match.group() for match in full_pattern.finditer(text)]
+    matches = []
+
+    # Find custom Discord emojis
+    for m in re.finditer(custom_pattern, text):
+        matches.append((m.start(), m.end(), m.group()))
+
+    try:
+        # emoji library >=2.0 provides emoji_list
+        for data in emoji.emoji_list(text):
+            matches.append((data["match_start"], data["match_end"], data["emoji"]))
+    except AttributeError:
+        # Fall back to older get_emoji_regexp if available
+        pattern = getattr(emoji, "get_emoji_regexp", lambda: re.compile(""))()
+        for m in pattern.finditer(text):
+            matches.append((m.start(), m.end(), m.group()))
+
+    matches.sort(key=lambda x: x[0])
+    return [m[2] for m in matches]
 
 def find_contiguous_emoji_chains(text):
     """Return lists of emojis that appear consecutively, including custom ones."""
     custom_pattern = r"<a?:\w+?:\d+>"
-    pattern = re.compile(f"({custom_pattern}|{emoji.get_emoji_regexp().pattern})")
-    chains=[]
-    current=[]
-    last_end=None
-    for m in pattern.finditer(text):
-        if last_end is not None and m.start()==last_end:
-            current.append(m.group())
+    matches = []
+
+    for m in re.finditer(custom_pattern, text):
+        matches.append((m.start(), m.end(), m.group()))
+
+    try:
+        for data in emoji.emoji_list(text):
+            matches.append((data["match_start"], data["match_end"], data["emoji"]))
+    except AttributeError:
+        pattern = getattr(emoji, "get_emoji_regexp", lambda: re.compile(""))()
+        for m in pattern.finditer(text):
+            matches.append((m.start(), m.end(), m.group()))
+
+    matches.sort(key=lambda x: x[0])
+
+    chains = []
+    current = []
+    last_end = None
+    for start, end, emj in matches:
+        if last_end is not None and start == last_end:
+            current.append(emj)
         else:
-            if len(current)>=2:
+            if len(current) >= 2:
                 chains.append(current)
-            current=[m.group()]
-        last_end=m.end()
-    if len(current)>=2:
+            current = [emj]
+        last_end = end
+    if len(current) >= 2:
         chains.append(current)
     return chains
 
