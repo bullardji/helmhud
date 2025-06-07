@@ -108,6 +108,7 @@ async def on_reaction_add(reaction, user):
         else:
             bot.user_data[user.id]["chains_adopted"][chain_key] = 1
 
+
         # Visual indicator the chain is being tracked
         # Add a sparkle reaction only once to indicate tracking
         try:
@@ -119,10 +120,13 @@ async def on_reaction_add(reaction, user):
         # Track the message for potential reaction chain auto-registration.
         # The timestamp is updated on each reaction so the chain must persist
         # for a full minute without changes.
+        # Track message for potential reaction chain auto-registration
+
         bot.pending_reaction_chains[reaction.message.id] = {
             "channel_id": reaction.message.channel.id,
             "guild_id": reaction.message.guild.id,
             "author": reaction.message.author.id,
+
             "chain": message_reactions,
             "timestamp": datetime.now(),
         }
@@ -338,9 +342,10 @@ async def auto_register_reaction_chains():
         except Exception:
             del bot.pending_reaction_chains[msg_id]
             continue
-
+            
         # Exclude the bot's sparkle indicator from the chain check
         message_reactions = [str(r.emoji) for r in message.reactions if str(r.emoji) != "✨"]
+
         if detect_starcode_chain(message_reactions):
             chain_key = "".join(message_reactions)
 

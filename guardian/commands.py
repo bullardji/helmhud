@@ -2295,6 +2295,7 @@ async def view_pending(ctx):
             elapsed = (current_time - data["timestamp"]).seconds
             remaining = max(0, 60 - elapsed)
 
+
             chain_display = "".join(data.get("chain", [])) or f"Message ID {msg_id}"
             if not chain_display:
                 try:
