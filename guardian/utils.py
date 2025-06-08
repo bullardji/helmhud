@@ -16,6 +16,26 @@ import time
 from .config import ROLES_CONFIG, DEFAULT_STARLOCKS, DEFAULT_TRAINING_QUESTS
 
 logger = logging.getLogger(__name__)
+
+
+def strip_bot_mentions(text: str) -> str:
+    """Remove all forms of the bot's mention from ``text``."""
+    if not bot.user:
+        return text.strip()
+    text = re.sub(rf"<@!?{bot.user.id}>", "", text)
+    text = text.replace(f"@{bot.user.display_name}", "")
+    text = text.replace(f"@{bot.user.name}", "")
+    return text.strip()
+
+
+def strip_all_mentions(text: str) -> str:
+    """Remove all Discord mentions from ``text``."""
+    text = strip_bot_mentions(text)
+    text = re.sub(r"<[@#&]!?(\d+)>", "", text)
+    text = re.sub(r"@\S+", "", text)
+    return text.strip()
+
+
 def extract_emojis(text):
     """Extract all Unicode and custom Discord emojis from ``text`` preserving order."""
     custom_pattern = r"<a?:\w+?:\d+>"

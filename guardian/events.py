@@ -5,13 +5,16 @@ from .utils import *
 from .config import *
 from .commands import cleanup_shield_listeners, cleanup_report_cooldowns
 import asyncio
+import re
+from .llm import ensure_model_downloaded
 # ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
     print(f'✠ {bot.user} has connected to the Vault')
     print(f'✠ Serving {len(bot.guilds)} guild(s)')
     print(f'✠ The semantic field awaits...')
-    
+    ensure_model_downloaded()
+
     # Start tasks only if they're not already running
     if not cleanup_shield_listeners.is_running():
         cleanup_shield_listeners.start()
@@ -154,15 +157,18 @@ async def on_message(message):
 
         await message.add_reaction("✨")
 
+        remory_text = strip_all_mentions(message.content)
         remory = {
             "author": message.author.id,
             "chain": emojis,
             "timestamp": datetime.now(),
-            "context": message.content[:100],
+            "context": remory_text[:100],
             "channel": message.channel.name,
             "message_id": message.id
         }
         bot.user_data[message.author.id]["remory_strings"].append(remory)
+        from .llm import invalidate_index
+        invalidate_index()
 
         unlock_message = await check_starlock(emojis, message.author, message.guild)
         if unlock_message:
@@ -170,6 +176,65 @@ async def on_message(message):
 
         if await check_training_progress(message.author.id, "message", message.content, message.channel):
             await complete_training_quest(message.author, message.channel)
+
+    if not emoji_sequences:
+        remory_text = strip_all_mentions(message.content)
+        if remory_text.strip():
+            remory = {
+                "author": message.author.id,
+                "chain": [],
+                "timestamp": datetime.now(),
+                "context": remory_text[:100],
+                "channel": message.channel.name,
+                "message_id": message.id,
+            }
+            bot.user_data[message.author.id]["remory_strings"].append(remory)
+            from .llm import invalidate_index
+            invalidate_index()
+
+    # LLM chat when the bot is mentioned
+    if bot.user in message.mentions:
+        query = strip_bot_mentions(message.content)
+
+        # Gather recent context excluding the bot's own messages
+        recent_lines = []
+        async for msg in message.channel.history(limit=5, before=message):
+            if msg.author.bot:
+                continue
+            clean_text = strip_all_mentions(msg.clean_content)
+            recent_lines.append(f"{msg.author.display_name}: {clean_text}")
+        recent_lines.reverse()
+        recent_context = "\n".join(recent_lines)
+
+        from .llm import get_similar, generate_reply
+        memories = get_similar(query, k=5)
+        unique_memories = []
+        seen = set()
+        for mem in memories:
+            if mem not in seen:
+                unique_memories.append(mem)
+                seen.add(mem)
+        memory_block = "\n".join(strip_all_mentions(mem) for mem in unique_memories)
+
+        prompt = (
+            "You are Helmhud Guardian, a helpful Discord bot. "
+            "Respond to the user based on the conversation and memories.\n\n"
+            "### Recent Conversation:\n" + recent_context +
+            "\n\n### Influential Memories:\n" + memory_block +
+            "\n\n### User Query:\n" + query +
+            "\n\n### Reply:\n"
+        )
+        reply = await asyncio.to_thread(generate_reply, prompt)
+        # Remove any bot mentions the model produced
+        reply = re.sub(rf"<@!?{bot.user.id}>", "", reply)
+        reply = reply.replace(f"@{bot.user.display_name}", "")
+        reply = reply.replace(f"@{bot.user.name}", "")
+        reply = reply.strip()
+
+        # Prepend the author's mention and avoid double mention
+        reply = f"{message.author.mention} {reply}".strip()
+        await message.reply(reply, mention_author=False)
+        return
     await bot.process_commands(message)
 
 async def complete_training_quest(user, channel):
