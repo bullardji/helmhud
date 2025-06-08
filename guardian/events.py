@@ -179,11 +179,13 @@ async def on_message(message):
     if bot.user in message.mentions:
         query = strip_bot_mentions(message.content)
 
+
         # Gather recent context excluding the bot's own messages
         recent_lines = []
         async for m in message.channel.history(limit=5, before=message):
             if m.author.bot:
                 continue
+
             clean_text = strip_bot_mentions(m.clean_content)
             recent_lines.append(f"{m.author.display_name}: {clean_text}")
         recent_lines.reverse()
@@ -198,6 +200,7 @@ async def on_message(message):
                 unique_memories.append(mem)
                 seen.add(mem)
         memory_block = "\n".join(strip_bot_mentions(mem) for mem in unique_memories)
+
 
         prompt = (
             "You are Helmhud Guardian, a helpful Discord bot. "
@@ -217,6 +220,7 @@ async def on_message(message):
         # Prepend the author's mention and avoid double mention
         reply = f"{message.author.mention} {reply}".strip()
         await message.reply(reply, mention_author=False)
+
         return
     await bot.process_commands(message)
 

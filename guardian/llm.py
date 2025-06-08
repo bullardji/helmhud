@@ -8,6 +8,7 @@ from sentence_transformers import SentenceTransformer
 import faiss
 
 from .bot import bot
+
 from .utils import strip_bot_mentions
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,7 @@ def generate_reply(prompt: str, max_tokens: int = 300) -> str:
     output = _model.generate(**gen_inputs, max_new_tokens=max_tokens)
     text = _tokenizer.decode(output[0], skip_special_tokens=True)
     text = text.replace("<|end|>", "")
+
     # Some models echo the entire prompt. If so, strip everything up to the
     # explicit reply section.
     if "### Reply:" in text:
