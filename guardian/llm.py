@@ -107,6 +107,8 @@ def get_similar(text: str, k: int = 5) -> List[str]:
 def generate_reply(prompt: str, max_tokens: int = 300) -> str:
     """Generate a reply from the LLM for a given prompt."""
     _load_models()
+    logger.info("Generating reply from LLM")
+
     inputs = _tokenizer(prompt, return_tensors="pt").to(_model.device)
     # Some models (e.g. LLaMA) don't accept token_type_ids. Ensure we never pass
     # them to `generate` even if the tokenizer returned them.

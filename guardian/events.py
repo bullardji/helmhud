@@ -6,13 +6,16 @@ from .config import *
 from .commands import cleanup_shield_listeners, cleanup_report_cooldowns
 import asyncio
 import re
+from .llm import ensure_model_downloaded
+
 # ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
     print(f'✠ {bot.user} has connected to the Vault')
     print(f'✠ Serving {len(bot.guilds)} guild(s)')
     print(f'✠ The semantic field awaits...')
-    
+    ensure_model_downloaded()
+
     # Start tasks only if they're not already running
     if not cleanup_shield_listeners.is_running():
         cleanup_shield_listeners.start()
