@@ -188,12 +188,21 @@ async def on_message(message):
 
         from .llm import get_similar, generate_reply
         memories = get_similar(query, k=5)
-        memory_block = "\n".join(memories)
+        unique_memories = []
+        seen = set()
+        for mem in memories:
+            if mem not in seen:
+                unique_memories.append(mem)
+                seen.add(mem)
+        memory_block = "\n".join(unique_memories)
 
         prompt = (
+            "You are Helmhud Guardian, a helpful Discord bot. "
+            "Respond to the user based on the conversation and memories.\n\n"
             "### Recent Conversation:\n" + recent_context +
             "\n\n### Influential Memories:\n" + memory_block +
-            "\n\n### User Query:\n" + query
+            "\n\n### User Query:\n" + query +
+            "\n\n### Reply:\n"
         )
         reply = await asyncio.to_thread(generate_reply, prompt)
         await message.reply(reply)
