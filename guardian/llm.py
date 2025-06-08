@@ -3,7 +3,6 @@
 from typing import List
 
 import logging
-
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from sentence_transformers import SentenceTransformer
 import faiss
@@ -30,7 +29,6 @@ def invalidate_index() -> None:
 
 def _load_models():
     global _tokenizer, _model, _emb_model
-
     try:
         if _tokenizer is None:
             logger.info("Downloading tokenizer %s", MODEL_NAME)
@@ -53,6 +51,7 @@ def _load_models():
 
 def ensure_model_downloaded() -> None:
     """Verify model files exist locally and download them if missing."""
+    global _tokenizer, _model, _emb_model
     try:
         AutoTokenizer.from_pretrained(MODEL_NAME, local_files_only=True)
         AutoModelForCausalLM.from_pretrained(MODEL_NAME, local_files_only=True)
@@ -69,7 +68,6 @@ def ensure_model_downloaded() -> None:
         )
     if _emb_model is None:
         _emb_model = SentenceTransformer(EMB_MODEL_NAME)
-
 
 
 def _build_index():
