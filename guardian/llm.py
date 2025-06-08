@@ -9,6 +9,8 @@ import faiss
 
 from .bot import bot
 
+from .utils import strip_bot_mentions
+
 logger = logging.getLogger(__name__)
 
 MODEL_NAME = "mrfakename/Apriel-5B-Instruct-llamafied"
@@ -73,7 +75,8 @@ def _build_index():
     remories = []
     for user in bot.user_data.values():
         for r in user.get("remory_strings", []):
-            remories.append(r.get("context", ""))
+            text = r.get("context", "")
+            remories.append(strip_bot_mentions(text))
     if not remories:
         _index = None
         _memories = []
@@ -108,8 +111,9 @@ def generate_reply(prompt: str, max_tokens: int = 300) -> str:
     # them to `generate` even if the tokenizer returned them.
     gen_inputs = {k: v for k, v in inputs.items() if k != "token_type_ids"}
     output = _model.generate(**gen_inputs, max_new_tokens=max_tokens)
-
     text = _tokenizer.decode(output[0], skip_special_tokens=True)
+    text = text.replace("<|end|>", "")
+
     # Some models echo the entire prompt. If so, strip everything up to the
     # explicit reply section.
     if "### Reply:" in text:

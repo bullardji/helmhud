@@ -5,6 +5,7 @@ from .utils import *
 from .config import *
 from .commands import cleanup_shield_listeners, cleanup_report_cooldowns
 import asyncio
+import re
 # ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
@@ -154,11 +155,12 @@ async def on_message(message):
 
         await message.add_reaction("✨")
 
+        remory_text = strip_bot_mentions(message.content)
         remory = {
             "author": message.author.id,
             "chain": emojis,
             "timestamp": datetime.now(),
-            "context": message.content[:100],
+            "context": remory_text[:100],
             "channel": message.channel.name,
             "message_id": message.id
         }
@@ -175,14 +177,17 @@ async def on_message(message):
 
     # LLM chat when the bot is mentioned
     if bot.user in message.mentions:
-        query = message.clean_content.replace(bot.user.mention, "").strip()
+        query = strip_bot_mentions(message.content)
+
 
         # Gather recent context excluding the bot's own messages
         recent_lines = []
         async for m in message.channel.history(limit=5, before=message):
             if m.author.bot:
                 continue
-            recent_lines.append(f"{m.author.display_name}: {m.clean_content}")
+
+            clean_text = strip_bot_mentions(m.clean_content)
+            recent_lines.append(f"{m.author.display_name}: {clean_text}")
         recent_lines.reverse()
         recent_context = "\n".join(recent_lines)
 
@@ -194,7 +199,8 @@ async def on_message(message):
             if mem not in seen:
                 unique_memories.append(mem)
                 seen.add(mem)
-        memory_block = "\n".join(unique_memories)
+        memory_block = "\n".join(strip_bot_mentions(mem) for mem in unique_memories)
+
 
         prompt = (
             "You are Helmhud Guardian, a helpful Discord bot. "
@@ -205,7 +211,16 @@ async def on_message(message):
             "\n\n### Reply:\n"
         )
         reply = await asyncio.to_thread(generate_reply, prompt)
-        await message.reply(reply)
+        # Remove any bot mentions the model produced
+        reply = re.sub(rf"<@!?{bot.user.id}>", "", reply)
+        reply = reply.replace(f"@{bot.user.display_name}", "")
+        reply = reply.replace(f"@{bot.user.name}", "")
+        reply = reply.strip()
+
+        # Prepend the author's mention and avoid double mention
+        reply = f"{message.author.mention} {reply}".strip()
+        await message.reply(reply, mention_author=False)
+
         return
     await bot.process_commands(message)
 
