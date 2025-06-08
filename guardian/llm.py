@@ -109,4 +109,11 @@ def generate_reply(prompt: str, max_tokens: int = 300) -> str:
     gen_inputs = {k: v for k, v in inputs.items() if k != "token_type_ids"}
     output = _model.generate(**gen_inputs, max_new_tokens=max_tokens)
 
-    return _tokenizer.decode(output[0], skip_special_tokens=True)
+    text = _tokenizer.decode(output[0], skip_special_tokens=True)
+    # Some models echo the entire prompt. If so, strip everything up to the
+    # explicit reply section.
+    if "### Reply:" in text:
+        text = text.split("### Reply:", 1)[1]
+    elif "Reply:" in text:
+        text = text.split("Reply:", 1)[1]
+    return text.strip()
