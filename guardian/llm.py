@@ -50,24 +50,23 @@ def _load_models():
 
 
 def ensure_model_downloaded() -> None:
-    """Verify model files exist locally and download them if missing."""
+    """Ensure the tokenizer, model and embedding model are loaded."""
     global _tokenizer, _model, _emb_model
+
+    if _tokenizer is not None and _model is not None and _emb_model is not None:
+        return
+
     try:
+        # Check for cached files without loading them in memory
         AutoTokenizer.from_pretrained(MODEL_NAME, local_files_only=True)
         AutoModelForCausalLM.from_pretrained(MODEL_NAME, local_files_only=True)
         SentenceTransformer(EMB_MODEL_NAME)
-        logger.info("Model files already present; skipping download")
+        logger.info("Model files already present; loading")
     except OSError:
         logger.info("Model files not found locally, downloading...")
-        _load_models()
-    if _tokenizer is None:
-        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    if _model is None:
-        _model = AutoModelForCausalLM.from_pretrained(
-            MODEL_NAME, device_map="auto", torch_dtype="auto"
-        )
-    if _emb_model is None:
-        _emb_model = SentenceTransformer(EMB_MODEL_NAME)
+
+    _load_models()
+
 
 
 def _build_index():
