@@ -7,6 +7,7 @@ from .commands import cleanup_shield_listeners, cleanup_report_cooldowns
 import asyncio
 import re
 from .llm import ensure_model_downloaded
+
 # ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
@@ -176,7 +177,6 @@ async def on_message(message):
 
         if await check_training_progress(message.author.id, "message", message.content, message.channel):
             await complete_training_quest(message.author, message.channel)
-
     if not emoji_sequences:
         remory_text = strip_all_mentions(message.content)
         if remory_text.strip():
