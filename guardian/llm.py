@@ -68,7 +68,6 @@ def ensure_model_downloaded() -> None:
     _load_models()
 
 
-
 def _build_index():
     global _index, _memories
     remories = []
@@ -105,5 +104,9 @@ def generate_reply(prompt: str, max_tokens: int = 300) -> str:
     """Generate a reply from the LLM for a given prompt."""
     _load_models()
     inputs = _tokenizer(prompt, return_tensors="pt").to(_model.device)
-    output = _model.generate(**inputs, max_new_tokens=max_tokens)
+    # Some models (e.g. LLaMA) don't accept token_type_ids. Ensure we never pass
+    # them to `generate` even if the tokenizer returned them.
+    gen_inputs = {k: v for k, v in inputs.items() if k != "token_type_ids"}
+    output = _model.generate(**gen_inputs, max_new_tokens=max_tokens)
+
     return _tokenizer.decode(output[0], skip_special_tokens=True)
