@@ -163,6 +163,8 @@ async def on_message(message):
             "message_id": message.id
         }
         bot.user_data[message.author.id]["remory_strings"].append(remory)
+        from .llm import invalidate_index
+        invalidate_index()
 
         unlock_message = await check_starlock(emojis, message.author, message.guild)
         if unlock_message:
@@ -170,6 +172,41 @@ async def on_message(message):
 
         if await check_training_progress(message.author.id, "message", message.content, message.channel):
             await complete_training_quest(message.author, message.channel)
+
+    # LLM chat when the bot is mentioned
+    if bot.user in message.mentions:
+        query = message.clean_content.replace(bot.user.mention, "").strip()
+
+        # Gather recent context excluding the bot's own messages
+        recent_lines = []
+        async for m in message.channel.history(limit=5, before=message):
+            if m.author.bot:
+                continue
+            recent_lines.append(f"{m.author.display_name}: {m.clean_content}")
+        recent_lines.reverse()
+        recent_context = "\n".join(recent_lines)
+
+        from .llm import get_similar, generate_reply
+        memories = get_similar(query, k=5)
+        unique_memories = []
+        seen = set()
+        for mem in memories:
+            if mem not in seen:
+                unique_memories.append(mem)
+                seen.add(mem)
+        memory_block = "\n".join(unique_memories)
+
+        prompt = (
+            "You are Helmhud Guardian, a helpful Discord bot. "
+            "Respond to the user based on the conversation and memories.\n\n"
+            "### Recent Conversation:\n" + recent_context +
+            "\n\n### Influential Memories:\n" + memory_block +
+            "\n\n### User Query:\n" + query +
+            "\n\n### Reply:\n"
+        )
+        reply = await asyncio.to_thread(generate_reply, prompt)
+        await message.reply(reply)
+        return
     await bot.process_commands(message)
 
 async def complete_training_quest(user, channel):
