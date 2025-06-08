@@ -68,6 +68,7 @@ def ensure_model_downloaded() -> None:
     _load_models()
 
 
+
 def _build_index():
     global _index, _memories
     remories = []
