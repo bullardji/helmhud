@@ -108,4 +108,5 @@ def generate_reply(prompt: str, max_tokens: int = 300) -> str:
     # them to `generate` even if the tokenizer returned them.
     gen_inputs = {k: v for k, v in inputs.items() if k != "token_type_ids"}
     output = _model.generate(**gen_inputs, max_new_tokens=max_tokens)
+
     return _tokenizer.decode(output[0], skip_special_tokens=True)
