@@ -174,7 +174,6 @@ async def on_message(message):
 
         if await check_training_progress(message.author.id, "message", message.content, message.channel):
             await complete_training_quest(message.author, message.channel)
-
     if not emoji_sequences:
         remory_text = strip_all_mentions(message.content)
         if remory_text.strip():
