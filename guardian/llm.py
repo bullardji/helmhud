@@ -79,6 +79,8 @@ def _build_index():
         _index = None
         _memories = []
         return
+    # Some models (e.g. LLaMA) don't accept token_type_ids
+    inputs.pop("token_type_ids", None)
     embeddings = _emb_model.encode(remories, convert_to_numpy=True)
     _index = faiss.IndexFlatL2(embeddings.shape[1])
     _index.add(embeddings)
