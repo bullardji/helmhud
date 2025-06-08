@@ -188,8 +188,18 @@ async def on_message(message):
             bot.user_data[message.author.id]["remory_strings"].append(remory)
             from .llm import invalidate_index
             invalidate_index()
-            clean_text = strip_all_mentions(m.clean_content)
-            recent_lines.append(f"{m.author.display_name}: {clean_text}")
+
+    # LLM chat when the bot is mentioned
+    if bot.user in message.mentions:
+        query = strip_bot_mentions(message.content)
+
+        # Gather recent context excluding the bot's own messages
+        recent_lines = []
+        async for msg in message.channel.history(limit=5, before=message):
+            if msg.author.bot:
+                continue
+            clean_text = strip_all_mentions(msg.clean_content)
+            recent_lines.append(f"{msg.author.display_name}: {clean_text}")
         recent_lines.reverse()
         recent_context = "\n".join(recent_lines)
 
@@ -202,7 +212,6 @@ async def on_message(message):
                 unique_memories.append(mem)
                 seen.add(mem)
         memory_block = "\n".join(strip_all_mentions(mem) for mem in unique_memories)
-
 
         prompt = (
             "You are Helmhud Guardian, a helpful Discord bot. "
