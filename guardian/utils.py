@@ -28,6 +28,14 @@ def strip_bot_mentions(text: str) -> str:
     return text.strip()
 
 
+def strip_all_mentions(text: str) -> str:
+    """Remove all Discord mentions from ``text``."""
+    text = strip_bot_mentions(text)
+    text = re.sub(r"<[@#&]!?(\d+)>", "", text)
+    text = re.sub(r"@\S+", "", text)
+    return text.strip()
+
+
 def extract_emojis(text):
     """Extract all Unicode and custom Discord emojis from ``text`` preserving order."""
     custom_pattern = r"<a?:\w+?:\d+>"

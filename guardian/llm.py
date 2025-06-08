@@ -2,6 +2,8 @@
 
 from typing import List
 
+import re
+
 import logging
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from sentence_transformers import SentenceTransformer
@@ -111,7 +113,7 @@ def generate_reply(prompt: str, max_tokens: int = 300) -> str:
     gen_inputs = {k: v for k, v in inputs.items() if k != "token_type_ids"}
     output = _model.generate(**gen_inputs, max_new_tokens=max_tokens)
     text = _tokenizer.decode(output[0], skip_special_tokens=True)
-    text = text.replace("<|end|>", "")
+    text = re.sub(r"<\|end.*?>", "", text)
     # Some models echo the entire prompt. If so, strip everything up to the
     # explicit reply section.
     if "### Reply:" in text:
