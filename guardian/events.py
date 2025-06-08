@@ -155,7 +155,7 @@ async def on_message(message):
 
         await message.add_reaction("✨")
 
-        remory_text = strip_bot_mentions(message.content)
+        remory_text = strip_all_mentions(message.content)
         remory = {
             "author": message.author.id,
             "chain": emojis,
@@ -174,19 +174,21 @@ async def on_message(message):
 
         if await check_training_progress(message.author.id, "message", message.content, message.channel):
             await complete_training_quest(message.author, message.channel)
-
-    # LLM chat when the bot is mentioned
-    if bot.user in message.mentions:
-        query = strip_bot_mentions(message.content)
-
-
-        # Gather recent context excluding the bot's own messages
-        recent_lines = []
-        async for m in message.channel.history(limit=5, before=message):
-            if m.author.bot:
-                continue
-
-            clean_text = strip_bot_mentions(m.clean_content)
+    if not emoji_sequences:
+        remory_text = strip_all_mentions(message.content)
+        if remory_text.strip():
+            remory = {
+                "author": message.author.id,
+                "chain": [],
+                "timestamp": datetime.now(),
+                "context": remory_text[:100],
+                "channel": message.channel.name,
+                "message_id": message.id,
+            }
+            bot.user_data[message.author.id]["remory_strings"].append(remory)
+            from .llm import invalidate_index
+            invalidate_index()
+            clean_text = strip_all_mentions(m.clean_content)
             recent_lines.append(f"{m.author.display_name}: {clean_text}")
         recent_lines.reverse()
         recent_context = "\n".join(recent_lines)
@@ -199,7 +201,7 @@ async def on_message(message):
             if mem not in seen:
                 unique_memories.append(mem)
                 seen.add(mem)
-        memory_block = "\n".join(strip_bot_mentions(mem) for mem in unique_memories)
+        memory_block = "\n".join(strip_all_mentions(mem) for mem in unique_memories)
 
 
         prompt = (
@@ -220,7 +222,6 @@ async def on_message(message):
         # Prepend the author's mention and avoid double mention
         reply = f"{message.author.mention} {reply}".strip()
         await message.reply(reply, mention_author=False)
-
         return
     await bot.process_commands(message)
 
