@@ -5,6 +5,7 @@ from .utils import *
 from .config import *
 from .commands import cleanup_shield_listeners, cleanup_report_cooldowns
 import asyncio
+import re
 # ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
@@ -175,7 +176,10 @@ async def on_message(message):
 
     # LLM chat when the bot is mentioned
     if bot.user in message.mentions:
-        query = message.clean_content.replace(bot.user.mention, "").strip()
+        query = re.sub(rf"<@!?{bot.user.id}>", "", message.content)
+        query = query.replace(f"@{bot.user.display_name}", "")
+        query = query.replace(f"@{bot.user.name}", "")
+        query = query.strip()
 
         # Gather recent context excluding the bot's own messages
         recent_lines = []
