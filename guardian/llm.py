@@ -53,7 +53,6 @@ def ensure_model_downloaded() -> None:
     """Verify model files exist locally and download them if missing."""
     global _tokenizer, _model, _emb_model
     try:
-        # Check for the cached files without loading them into memory
         AutoTokenizer.from_pretrained(MODEL_NAME, local_files_only=True)
         AutoModelForCausalLM.from_pretrained(MODEL_NAME, local_files_only=True)
         SentenceTransformer(EMB_MODEL_NAME)
@@ -61,6 +60,14 @@ def ensure_model_downloaded() -> None:
     except OSError:
         logger.info("Model files not found locally, downloading...")
         _load_models()
+    if _tokenizer is None:
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    if _model is None:
+        _model = AutoModelForCausalLM.from_pretrained(
+            MODEL_NAME, device_map="auto", torch_dtype="auto"
+        )
+    if _emb_model is None:
+        _emb_model = SentenceTransformer(EMB_MODEL_NAME)
 
 
 def _build_index():
